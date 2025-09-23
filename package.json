@@ -1,0 +1,53 @@
+{
+  "name": "wb_mcp",
+  "version": "1.0.0",
+  "description": "微博 MCP 工程 - 基于 Electron 的微博数据采集和 MCP 服务",
+  "main": "dist/index.js",
+  "bin": {
+    "wb-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:mcp": "npm run build",
+    "dev": "concurrently \"npm run build:watch\" \"npm run start\"",
+    "build:watch": "tsc --watch",
+    "start": "node dist/index.js",
+    "start:ts": "ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "weibo",
+    "mcp",
+    "electron",
+    "data-collection"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.1",
+    "axios": "^1.6.0",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.0.0",
+    "concurrently": "^8.0.0",
+    "electron": "^38.1.2",
+    "eslint": "^8.0.0",
+    "nodemon": "^3.0.0",
+    "prettier": "^3.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

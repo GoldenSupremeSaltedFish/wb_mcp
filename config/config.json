@@ -1,0 +1,17 @@
+{
+  "weibo": {
+    "accessToken": "",
+    "cookie": "",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "rateLimit": 10,
+    "requestInterval": 1000
+  },
+  "mcp": {
+    "port": 3000,
+    "host": "localhost"
+  },
+  "logLevel": "info",
+  "logFile": "logs/wb_mcp.log",
+  "dataDir": "./data",
+  "exportDir": "./exports"
+}
