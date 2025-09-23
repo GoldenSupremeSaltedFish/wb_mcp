@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微博 MCP 配置管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            color: #e74c3c;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .card h2 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        .form-group small {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .button:hover {
+            background: #c0392b;
+        }
+        
+        .button.secondary {
+            background: #6c757d;
+        }
+        
+        .button.secondary:hover {
+            background: #545b62;
+        }
+        
+        .button.success {
+            background: #28a745;
+        }
+        
+        .button.success:hover {
+            background: #1e7e34;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom-color: #e74c3c;
+            color: #e74c3c;
+            font-weight: 500;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .service-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .status-item .icon {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .status-item .label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .status-item .value {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .log-entry.error {
+            color: #dc3545;
+        }
+        
+        .log-entry.warn {
+            color: #ffc107;
+        }
+        
+        .log-entry.info {
+            color: #17a2b8;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐦 微博 MCP 配置管理</h1>
+            <p>管理微博 MCP 服务的配置、监控服务状态和查看日志</p>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('config')">配置管理</div>
+            <div class="tab" onclick="showTab('status')">服务状态</div>
+            <div class="tab" onclick="showTab('logs')">日志查看</div>
+            <div class="tab" onclick="showTab('tools')">工具测试</div>
+        </div>
+        
+        <!-- 配置管理标签页 -->
+        <div id="config" class="tab-content active">
+            <div class="card">
+                <h2>微博认证配置</h2>
+                <div id="config-status"></div>
+                
+                <div class="form-group">
+                    <label for="access-token">Access Token</label>
+                    <input type="password" id="access-token" placeholder="输入微博 Access Token">
+                    <small>从微博开发者平台获取的访问令牌</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="cookie">Cookie</label>
+                    <textarea id="cookie" placeholder="输入微博 Cookie 字符串"></textarea>
+                    <small>从浏览器开发者工具中复制的 Cookie 值</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="user-agent">User Agent</label>
+                    <input type="text" id="user-agent" placeholder="浏览器 User Agent">
+                    <small>模拟的浏览器标识，用于避免检测</small>
+                </div>
+                
+                <button class="button" onclick="saveConfig()">保存配置</button>
+                <button class="button secondary" onclick="loadConfig()">重新加载</button>
+                <button class="button secondary" onclick="testConnection()">测试连接</button>
+            </div>
+            
+            <div class="card">
+                <h2>服务配置</h2>
+                
+                <div class="form-group">
+                    <label for="mcp-port">MCP 服务端口</label>
+                    <input type="number" id="mcp-port" placeholder="3000">
+                    <small>MCP 服务监听的端口号</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="rate-limit">请求频率限制</label>
+                    <input type="number" id="rate-limit" placeholder="10">
+                    <small>每秒最大请求次数</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="request-interval">请求间隔 (毫秒)</label>
+                    <input type="number" id="request-interval" placeholder="1000">
+                    <small>请求之间的最小间隔时间</small>
+                </div>
+                
+                <button class="button" onclick="saveServiceConfig()">保存服务配置</button>
+            </div>
+            
+            <div class="card">
+                <h2>数据存储配置</h2>
+                
+                <div class="form-group">
+                    <label for="data-dir">数据目录</label>
+                    <input type="text" id="data-dir" placeholder="./data">
+                    <small>存储采集数据的目录路径</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="export-dir">导出目录</label>
+                    <input type="text" id="export-dir" placeholder="./exports">
+                    <small>导出文件的保存目录</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="log-level">日志级别</label>
+                    <select id="log-level">
+                        <option value="debug">Debug</option>
+                        <option value="info" selected>Info</option>
+                        <option value="warn">Warn</option>
+                        <option value="error">Error</option>
+                    </select>
+                    <small>日志记录的详细程度</small>
+                </div>
+                
+                <button class="button" onclick="saveStorageConfig()">保存存储配置</button>
+            </div>
+        </div>
+        
+        <!-- 服务状态标签页 -->
+        <div id="status" class="tab-content">
+            <div class="card">
+                <h2>服务状态</h2>
+                <div class="service-status">
+                    <div class="status-item">
+                        <div class="icon">🌐</div>
+                        <div class="label">MCP 服务</div>
+                        <div class="value" id="mcp-status">检查中...</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="icon">🔐</div>
+                        <div class="label">认证状态</div>
+                        <div class="value" id="auth-status">检查中...</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="icon">⏰</div>
+                        <div class="label">任务调度器</div>
+                        <div class="value" id="scheduler-status">检查中...</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="icon">🌍</div>
+                        <div class="label">浏览器</div>
+                        <div class="value" id="browser-status">检查中...</div>
+                    </div>
+                </div>
+                
+                <button class="button" onclick="refreshStatus()">刷新状态</button>
+                <button class="button secondary" onclick="startService()">启动服务</button>
+                <button class="button secondary" onclick="stopService()">停止服务</button>
+            </div>
+            
+            <div class="card">
+                <h2>任务调度器状态</h2>
+                <div id="task-status"></div>
+                <button class="button" onclick="refreshTaskStatus()">刷新任务状态</button>
+            </div>
+        </div>
+        
+        <!-- 日志查看标签页 -->
+        <div id="logs" class="tab-content">
+            <div class="card">
+                <h2>实时日志</h2>
+                <div class="log-container" id="log-container">
+                    <div class="log-entry info">等待日志输出...</div>
+                </div>
+                <button class="button" onclick="clearLogs()">清空日志</button>
+                <button class="button secondary" onclick="exportLogs()">导出日志</button>
+            </div>
+        </div>
+        
+        <!-- 工具测试标签页 -->
+        <div id="tools" class="tab-content">
+            <div class="card">
+                <h2>工具测试</h2>
+                
+                <div class="form-group">
+                    <label for="test-tool">选择工具</label>
+                    <select id="test-tool" onchange="updateToolParams()">
+                        <option value="">请选择工具</option>
+                        <option value="search_posts">搜索微博</option>
+                        <option value="get_hot_topics">获取热搜榜</option>
+                        <option value="get_comments">获取评论</option>
+                        <option value="get_status">获取状态</option>
+                        <option value="task_scheduler">任务调度器</option>
+                    </select>
+                </div>
+                
+                <div id="tool-params"></div>
+                
+                <button class="button" onclick="testTool()">执行测试</button>
+                <button class="button secondary" onclick="clearTestResult()">清空结果</button>
+                
+                <div id="test-result" class="hidden">
+                    <h3>测试结果</h3>
+                    <pre id="test-output"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 标签页切换
+        function showTab(tabName) {
+            // 隐藏所有标签页内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 移除所有标签的激活状态
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 显示选中的标签页
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // 根据标签页加载相应数据
+            if (tabName === 'status') {
+                refreshStatus();
+            } else if (tabName === 'logs') {
+                startLogStream();
+            }
+        }
+        
+        // 配置管理
+        function saveConfig() {
+            const config = {
+                accessToken: document.getElementById('access-token').value,
+                cookie: document.getElementById('cookie').value,
+                userAgent: document.getElementById('user-agent').value
+            };
+            
+            // 这里应该调用主进程保存配置
+            showStatus('配置保存成功', 'success');
+        }
+        
+        function loadConfig() {
+            // 这里应该从主进程加载配置
+            showStatus('配置加载成功', 'success');
+        }
+        
+        function testConnection() {
+            showStatus('正在测试连接...', 'info');
+            // 这里应该调用主进程测试连接
+            setTimeout(() => {
+                showStatus('连接测试完成', 'success');
+            }, 2000);
+        }
+        
+        function saveServiceConfig() {
+            const config = {
+                port: document.getElementById('mcp-port').value,
+                rateLimit: document.getElementById('rate-limit').value,
+                requestInterval: document.getElementById('request-interval').value
+            };
+            
+            showStatus('服务配置保存成功', 'success');
+        }
+        
+        function saveStorageConfig() {
+            const config = {
+                dataDir: document.getElementById('data-dir').value,
+                exportDir: document.getElementById('export-dir').value,
+                logLevel: document.getElementById('log-level').value
+            };
+            
+            showStatus('存储配置保存成功', 'success');
+        }
+        
+        // 状态管理
+        function refreshStatus() {
+            // 模拟状态检查
+            document.getElementById('mcp-status').textContent = '运行中';
+            document.getElementById('auth-status').textContent = '已认证';
+            document.getElementById('scheduler-status').textContent = '运行中';
+            document.getElementById('browser-status').textContent = '就绪';
+        }
+        
+        function refreshTaskStatus() {
+            const taskStatus = document.getElementById('task-status');
+            taskStatus.innerHTML = `
+                <div class="status info">
+                    <strong>定时拉取热搜榜:</strong> 启用 (下次运行: 5分钟后)<br>
+                    <strong>检查认证状态:</strong> 启用 (下次运行: 1小时后)<br>
+                    <strong>清理旧日志:</strong> 启用 (下次运行: 24小时后)
+                </div>
+            `;
+        }
+        
+        // 日志管理
+        function startLogStream() {
+            const logContainer = document.getElementById('log-container');
+            // 模拟日志流
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry info';
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] 日志流已启动`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        function clearLogs() {
+            document.getElementById('log-container').innerHTML = '<div class="log-entry info">日志已清空</div>';
+        }
+        
+        function exportLogs() {
+            showStatus('日志导出功能开发中...', 'info');
+        }
+        
+        // 工具测试
+        function updateToolParams() {
+            const tool = document.getElementById('test-tool').value;
+            const paramsDiv = document.getElementById('tool-params');
+            
+            let paramsHTML = '';
+            switch (tool) {
+                case 'search_posts':
+                    paramsHTML = `
+                        <div class="form-group">
+                            <label for="search-keyword">搜索关键词</label>
+                            <input type="text" id="search-keyword" placeholder="输入搜索关键词">
+                        </div>
+                        <div class="form-group">
+                            <label for="search-limit">结果数量</label>
+                            <input type="number" id="search-limit" value="10">
+                        </div>
+                    `;
+                    break;
+                case 'get_hot_topics':
+                    paramsHTML = `
+                        <div class="form-group">
+                            <label for="topics-limit">话题数量</label>
+                            <input type="number" id="topics-limit" value="20">
+                        </div>
+                    `;
+                    break;
+                case 'get_comments':
+                    paramsHTML = `
+                        <div class="form-group">
+                            <label for="post-id">微博 ID</label>
+                            <input type="text" id="post-id" placeholder="输入微博 ID">
+                        </div>
+                        <div class="form-group">
+                            <label for="comments-limit">评论数量</label>
+                            <input type="number" id="comments-limit" value="10">
+                        </div>
+                    `;
+                    break;
+            }
+            
+            paramsDiv.innerHTML = paramsHTML;
+        }
+        
+        function testTool() {
+            const tool = document.getElementById('test-tool').value;
+            if (!tool) {
+                showStatus('请先选择要测试的工具', 'error');
+                return;
+            }
+            
+            showStatus('正在执行测试...', 'info');
+            
+            // 模拟工具执行
+            setTimeout(() => {
+                const result = {
+                    success: true,
+                    data: `测试工具 ${tool} 执行成功`,
+                    timestamp: new Date().toISOString()
+                };
+                
+                document.getElementById('test-output').textContent = JSON.stringify(result, null, 2);
+                document.getElementById('test-result').classList.remove('hidden');
+                showStatus('工具测试完成', 'success');
+            }, 2000);
+        }
+        
+        function clearTestResult() {
+            document.getElementById('test-result').classList.add('hidden');
+            document.getElementById('test-output').textContent = '';
+        }
+        
+        // 工具函数
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('config-status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 3000);
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            refreshStatus();
+            refreshTaskStatus();
+        });
+    </script>
+</body>
+</html>

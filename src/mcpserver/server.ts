@@ -128,7 +128,7 @@ class MCPServer {
       running: this.isRunning,
       transports: {
         stdio: this.isRunning,
-        http: this.httpTransport ? this.httpTransport.getServerInfo() : undefined,
+        ...(this.httpTransport && { http: this.httpTransport.getServerInfo() }),
       },
     };
   }

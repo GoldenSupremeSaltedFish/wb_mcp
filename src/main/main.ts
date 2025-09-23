@@ -55,8 +55,8 @@ class WeiboMCPApp {
       },
     });
 
-    // 加载配置管理界面（可选）
-    // this.mainWindow.loadFile('src/renderer/index.html');
+    // 加载配置管理界面
+    this.mainWindow.loadFile('src/renderer/index.html');
 
     this.mainWindow.on('close', (event: any) => {
       if (!this.isQuitting) {

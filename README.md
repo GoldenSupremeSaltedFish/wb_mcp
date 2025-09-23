@@ -5,11 +5,14 @@
 ## 🚀 功能特性
 
 - **MCP 服务**: 提供标准化的 MCP 接口，支持工具调用
+- **多传输方式**: 支持 STDIO、HTTP 和 SSE 流式传输
+- **任务调度器**: 定时拉取热搜榜、检查认证状态、清理日志
 - **微博数据采集**: 支持搜索微博、获取热搜榜、获取评论等功能
 - **数据导出**: 支持 JSON 和 CSV 格式导出
 - **配置管理**: 灵活的配置系统，支持环境变量
 - **日志系统**: 完整的日志记录和错误处理
 - **请求限流**: 内置请求限流机制，避免触发微博风控
+- **HTTP API**: RESTful API 接口，支持跨平台调用
 
 ## 📋 可用工具
 
@@ -21,6 +24,7 @@
 | `post_comment` | 发布微博评论 | postId, text |
 | `export_data` | 导出数据 | format, filename, data |
 | `get_status` | 获取服务状态 | - |
+| `task_scheduler` | 任务调度器管理 | action, taskId, limit |
 
 ## 🛠️ 安装和运行
 
@@ -135,6 +139,50 @@ wb_mcp/
 
 ## 📊 使用示例
 
+### HTTP API 调用
+
+#### 健康检查
+```bash
+curl http://localhost:3000/health
+```
+
+#### 获取工具列表
+```bash
+curl http://localhost:3000/tools
+```
+
+#### 执行工具
+```bash
+curl -X POST http://localhost:3000/tools/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "search_posts",
+    "arguments": {
+      "keyword": "人工智能",
+      "limit": 10,
+      "sort": "hot"
+    }
+  }'
+```
+
+#### SSE 流式执行
+```bash
+curl http://localhost:3000/stream/get_hot_topics?limit=5
+```
+
+#### 任务调度器管理
+```bash
+# 查看任务状态
+curl -X POST http://localhost:3000/tools/execute \
+  -H "Content-Type: application/json" \
+  -d '{"name": "task_scheduler", "arguments": {"action": "status"}}'
+
+# 启用任务
+curl -X POST http://localhost:3000/tools/execute \
+  -H "Content-Type: application/json" \
+  -d '{"name": "task_scheduler", "arguments": {"action": "enable", "taskId": "hot-topics"}}'
+```
+
 ### 通过 MCP 客户端调用
 
 ```json
@@ -149,20 +197,6 @@ wb_mcp/
       "limit": 10,
       "sort": "hot"
     }
-  }
-}
-```
-
-### 获取服务状态
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "tools/call",
-  "params": {
-    "name": "get_status",
-    "arguments": {}
   }
 }
 ```

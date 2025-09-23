@@ -2,6 +2,7 @@ import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
 import { weiboAPI } from '../api/weibo-api';
+import { taskScheduler } from '../utils/scheduler';
 
 export interface SearchPostsParams {
   keyword: string;
@@ -27,6 +28,12 @@ export interface ExportDataParams {
   format: 'json' | 'csv';
   filename: string;
   data: any[];
+}
+
+export interface TaskSchedulerParams {
+  action: 'status' | 'enable' | 'disable' | 'results';
+  taskId?: string;
+  limit?: number;
 }
 
 class WeiboTools {
@@ -138,6 +145,30 @@ class WeiboTools {
         properties: {},
       },
     },
+    {
+      name: 'task_scheduler',
+      description: '任务调度器管理',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['status', 'enable', 'disable', 'results'],
+            description: '操作类型：status(状态), enable(启用), disable(禁用), results(结果)',
+          },
+          taskId: {
+            type: 'string',
+            description: '任务 ID（启用/禁用时需要）',
+          },
+          limit: {
+            type: 'number',
+            description: '结果数量限制（获取结果时使用）',
+            default: 50,
+          },
+        },
+        required: ['action'],
+      },
+    },
   ];
 
   public getAvailableTools(): Tool[] {
@@ -165,6 +196,9 @@ class WeiboTools {
       
       case 'get_status':
         return await this.getStatus();
+      
+      case 'task_scheduler':
+        return await this.taskScheduler(args as TaskSchedulerParams);
       
       default:
         throw new Error(`未知工具: ${name}`);
@@ -400,6 +434,100 @@ class WeiboTools {
         },
       ],
     };
+  }
+
+  private async taskScheduler(params: TaskSchedulerParams): Promise<CallToolResult> {
+    const { action, taskId, limit = 50 } = params;
+    
+    try {
+      switch (action) {
+        case 'status':
+          const status = taskScheduler.getTaskStatus();
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  data: {
+                    running: taskScheduler.isSchedulerRunning(),
+                    tasks: status,
+                  },
+                }, null, 2),
+              },
+            ],
+          };
+        
+        case 'enable':
+          if (!taskId) {
+            throw new Error('启用任务需要提供 taskId');
+          }
+          const enabled = taskScheduler.enableTask(taskId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: enabled,
+                  message: enabled ? `任务 ${taskId} 已启用` : `任务 ${taskId} 不存在`,
+                }, null, 2),
+              },
+            ],
+          };
+        
+        case 'disable':
+          if (!taskId) {
+            throw new Error('禁用任务需要提供 taskId');
+          }
+          const disabled = taskScheduler.disableTask(taskId);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: disabled,
+                  message: disabled ? `任务 ${taskId} 已禁用` : `任务 ${taskId} 不存在`,
+                }, null, 2),
+              },
+            ],
+          };
+        
+        case 'results':
+          const results = taskScheduler.getRecentResults(limit);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  success: true,
+                  data: {
+                    results,
+                    count: results.length,
+                    limit,
+                  },
+                }, null, 2),
+              },
+            ],
+          };
+        
+        default:
+          throw new Error(`不支持的操作: ${action}`);
+      }
+    } catch (error) {
+      logger.error('任务调度器操作失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   private convertToCSV(data: any[]): string {

@@ -9,14 +9,23 @@
   "scripts": {
     "build": "tsc",
     "build:mcp": "npm run build",
+    "build:electron": "npm run build && electron-builder",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux",
     "dev": "concurrently \"npm run build:watch\" \"npm run start\"",
+    "dev:electron": "concurrently \"npm run build:watch\" \"wait-on dist/index.js && electron dist/index.js\"",
     "build:watch": "tsc --watch",
     "start": "node dist/index.js",
     "start:ts": "ts-node src/index.ts",
+    "start:electron": "electron dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "format": "prettier --write src/**/*.ts"
+    "format": "prettier --write src/**/*.ts",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "keywords": [
     "weibo",
@@ -26,13 +35,90 @@
   ],
   "author": "",
   "license": "MIT",
+  "build": {
+    "appId": "com.weibo.mcp",
+    "productName": "微博 MCP 服务",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "config",
+        "to": "config"
+      },
+      {
+        "from": "data",
+        "to": "data"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "微博 MCP 服务"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "your-username",
+      "repo": "wb_mcp"
+    }
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.18.1",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
     "axios": "^1.6.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
@@ -41,6 +127,7 @@
     "@types/node": "^20.0.0",
     "concurrently": "^8.0.0",
     "electron": "^38.1.2",
+    "electron-builder": "^26.0.12",
     "eslint": "^8.0.0",
     "nodemon": "^3.0.0",
     "prettier": "^3.0.0",

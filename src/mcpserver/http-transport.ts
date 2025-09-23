@@ -16,11 +16,9 @@ export interface HttpTransportOptions {
 export class HttpTransport {
   private app: express.Application;
   private server: any;
-  private mcpServer: Server;
   private options: HttpTransportOptions;
 
-  constructor(mcpServer: Server, options: HttpTransportOptions) {
-    this.mcpServer = mcpServer;
+  constructor(_mcpServer: Server, options: HttpTransportOptions) {
     this.options = {
       enableCORS: true,
       enableCompression: true,
@@ -53,7 +51,7 @@ export class HttpTransport {
     }
 
     // 请求日志
-    this.app.use((req: Request, res: Response, next: NextFunction) => {
+    this.app.use((req: Request, _res: Response, next: NextFunction) => {
       logger.info(`HTTP ${req.method} ${req.path}`, {
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -64,7 +62,7 @@ export class HttpTransport {
 
   private setupRoutes(): void {
     // 健康检查
-    this.app.get('/health', (req: Request, res: Response) => {
+    this.app.get('/health', (_req: Request, res: Response) => {
       res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -74,7 +72,7 @@ export class HttpTransport {
     });
 
     // MCP 工具列表
-    this.app.get('/tools', async (req: Request, res: Response) => {
+    this.app.get('/tools', async (_req: Request, res: Response) => {
       try {
         const tools = weiboTools.getAvailableTools();
         res.json({
@@ -96,10 +94,11 @@ export class HttpTransport {
         const { name, arguments: args } = req.body;
         
         if (!name) {
-          return res.status(400).json({
+          res.status(400).json({
             success: false,
             error: '缺少工具名称',
           });
+          return;
         }
 
         logger.logMCPService('HTTP 工具执行', { name, args });
@@ -143,7 +142,7 @@ export class HttpTransport {
         })}\n\n`);
 
         // 执行工具并流式返回结果
-        const result = await weiboTools.executeTool(toolName, args);
+        const result = await weiboTools.executeTool(toolName as string, args as any);
         
         // 发送结果
         res.write(`data: ${JSON.stringify({
@@ -174,7 +173,7 @@ export class HttpTransport {
     });
 
     // 服务状态
-    this.app.get('/status', async (req: Request, res: Response) => {
+    this.app.get('/status', async (_req: Request, res: Response) => {
       try {
         const config = configManager.getConfig();
         res.json({
@@ -211,7 +210,7 @@ export class HttpTransport {
     });
 
     // 错误处理中间件
-    this.app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
+    this.app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
       logger.error('HTTP 请求错误:', error);
       res.status(500).json({
         success: false,
