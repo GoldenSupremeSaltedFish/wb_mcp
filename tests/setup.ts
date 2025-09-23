@@ -11,20 +11,31 @@ jest.mock('electron', () => ({
     loadURL: jest.fn(),
     webContents: {
       executeJavaScript: jest.fn().mockResolvedValue({}),
+      setUserAgent: jest.fn(),
       on: jest.fn(),
+      once: jest.fn(),
+      send: jest.fn(),
     },
     on: jest.fn(),
+    once: jest.fn(),
     close: jest.fn(),
+    show: jest.fn(),
+    hide: jest.fn(),
+    isVisible: jest.fn().mockReturnValue(false),
+    isDestroyed: jest.fn().mockReturnValue(false),
   })),
   ipcMain: {
     on: jest.fn(),
     handle: jest.fn(),
     removeAllListeners: jest.fn(),
+    removeHandler: jest.fn(),
   },
   app: {
     getPath: jest.fn(() => './test-data'),
     on: jest.fn(),
     whenReady: jest.fn().mockResolvedValue({}),
+    isReady: jest.fn().mockReturnValue(true),
+    quit: jest.fn(),
   },
 }));
 
