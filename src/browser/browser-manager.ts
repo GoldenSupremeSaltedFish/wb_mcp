@@ -1,6 +1,19 @@
-import { BrowserWindow, ipcMain } from 'electron';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
+
+// 条件导入Electron模块
+let BrowserWindow: any = null;
+let ipcMain: any = null;
+
+try {
+  const electron = require('electron');
+  if (typeof electron === 'object' && electron.BrowserWindow) {
+    BrowserWindow = electron.BrowserWindow;
+    ipcMain = electron.ipcMain;
+  }
+} catch (error) {
+  logger.warn('Electron模块不可用，运行在非Electron环境中');
+}
 
 export interface BrowserOptions {
   show: boolean;
@@ -25,7 +38,7 @@ export interface LoginStatus {
 }
 
 class BrowserManager {
-  private weiboWindow: BrowserWindow | null = null;
+  private weiboWindow: any = null;
   private isInitialized = false;
   private navigationHistory: NavigationEvent[] = [];
   private loginStatus: LoginStatus = {
@@ -38,8 +51,14 @@ class BrowserManager {
   }
 
   private setupIpcHandlers(): void {
+    // 只在Electron可用时设置IPC处理器
+    if (!ipcMain) {
+      logger.warn('ipcMain不可用，跳过IPC处理器设置');
+      return;
+    }
+    
     // 处理来自渲染进程的消息
-    ipcMain.handle('browser-execute-js', async (_event, code: string) => {
+    ipcMain.handle('browser-execute-js', async (_event: any, code: string) => {
       if (this.weiboWindow) {
         try {
           const result = await this.weiboWindow.webContents.executeJavaScript(code);
@@ -77,6 +96,12 @@ class BrowserManager {
       return;
     }
 
+    if (!BrowserWindow) {
+      logger.warn('BrowserWindow不可用，跳过浏览器管理器初始化');
+      this.isInitialized = true;
+      return;
+    }
+
     try {
       await this.createWeiboWindow();
       this.isInitialized = true;
@@ -88,6 +113,10 @@ class BrowserManager {
   }
 
   private async createWeiboWindow(): Promise<void> {
+    if (!BrowserWindow) {
+      throw new Error('BrowserWindow不可用');
+    }
+    
     const config = configManager.getWeiboConfig();
     
     this.weiboWindow = new BrowserWindow({
@@ -108,11 +137,11 @@ class BrowserManager {
     }
 
     // 监听页面导航事件
-    this.weiboWindow.webContents.on('did-navigate', (_event, url) => {
+    this.weiboWindow.webContents.on('did-navigate', (_event: any, url: string) => {
       this.handleNavigation('navigate', url);
     });
 
-    this.weiboWindow.webContents.on('did-navigate-in-page', (_event, url) => {
+    this.weiboWindow.webContents.on('did-navigate-in-page', (_event: any, url: string) => {
       this.handleNavigation('navigate-in-page', url);
     });
 
@@ -120,7 +149,7 @@ class BrowserManager {
       this.handlePageLoad();
     });
 
-    this.weiboWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    this.weiboWindow.webContents.on('did-fail-load', (_event: any, errorCode: any, errorDescription: any) => {
       logger.error('页面加载失败:', { errorCode, errorDescription });
     });
 
@@ -323,7 +352,7 @@ class BrowserManager {
     }
   }
 
-  public getWindow(): BrowserWindow | null {
+  public getWindow(): any {
     return this.weiboWindow;
   }
 
