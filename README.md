@@ -1,6 +1,6 @@
 # 微博 MCP 工程
 
-一个基于 Electron 和 MCP (Model Context Protocol) 的微博数据采集和服务项目。
+一个基于 Electron 和 MCP (Model Context Protocol) 的**个人助手工具**，用于协助个人用户进行微博相关的信息获取和交互。
 
 ## 🚀 功能特性
 
@@ -216,9 +216,15 @@ curl -X POST http://localhost:3000/tools/execute \
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 打开 Pull Request
 
-## 📄 许可证
+## ⚖️ License & Usage
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目遵循 **CC BY-NC 4.0 协议**：
+- ✅ 允许个人学习、研究和非商业用途
+- ✅ 允许修改和分发（必须保留署名和协议）
+- ❌ 严禁任何商业用途（包括但不限于销售、广告、代运营）
+- ❌ 严禁用于违反目标平台服务条款的行为
+
+使用本项目所造成的风险和后果，由使用者自行承担。
 
 ## 🆘 支持
 
@@ -231,4 +237,4 @@ curl -X POST http://localhost:3000/tools/execute \
 
 ---
 
-**注意**: 本项目仅用于学习和研究目的，请遵守微博的使用条款和相关法律法规。
+**重要声明**: 本项目是一个**个人助手工具**，仅用于个人学习、研究和非商业用途。严禁用于任何商业用途或违反目标平台服务条款的行为。请遵守微博的使用条款和相关法律法规。
