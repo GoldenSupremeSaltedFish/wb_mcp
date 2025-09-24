@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
+import { ConfigTemplateManager } from './config-templates';
 
 export interface BrowserFingerprint {
   locale: string;
@@ -225,6 +226,79 @@ class ConfigManager {
 
   public getExportPath(filename?: string): string {
     return filename ? path.join(this.config.exportDir, filename) : this.config.exportDir;
+  }
+
+  public async applyTemplate(templateId: string): Promise<boolean> {
+    try {
+      const template = ConfigTemplateManager.getTemplate(templateId);
+      if (!template) {
+        logger.error(`模板 "${templateId}" 不存在`);
+        return false;
+      }
+
+      // 应用模板配置
+      this.config.weibo.userAgent = template.userAgent;
+      this.config.weibo.browserFingerprint = template.browserFingerprint;
+      this.config.weibo.userBehavior = template.userBehavior;
+
+      // 保存配置
+      await this.saveConfig();
+      
+      logger.info(`已应用模板: ${template.name}`);
+      return true;
+    } catch (error) {
+      logger.error('应用模板失败:', error);
+      return false;
+    }
+  }
+
+  public getAvailableTemplates(): Array<{id: string, name: string, description: string, category: string}> {
+    return ConfigTemplateManager.getAllTemplates().map(template => ({
+      id: this.getTemplateId(template),
+      name: template.name,
+      description: template.description,
+      category: template.category
+    }));
+  }
+
+  public getCurrentTemplateId(): string | null {
+    const config = this.config.weibo;
+    
+    // 根据当前配置匹配模板
+    const templates = ConfigTemplateManager.getAllTemplates();
+    for (const template of templates) {
+      if (this.isConfigMatchingTemplate(config, template)) {
+        return this.getTemplateId(template);
+      }
+    }
+    
+    return null;
+  }
+
+  private getTemplateId(template: any): string {
+    const idMap: Record<string, string> = {
+      '普通桌面用户': 'desktop_normal',
+      '高分辨率桌面用户': 'desktop_high_res',
+      'Android移动用户': 'mobile_android',
+      'iOS移动用户': 'mobile_ios',
+      '企业用户': 'enterprise_user',
+      '隐身模式': 'stealth_mode',
+      '快速模式': 'fast_mode'
+    };
+    
+    return idMap[template.name] || 'custom';
+  }
+
+  private isConfigMatchingTemplate(config: WeiboConfig, template: any): boolean {
+    return (
+      config.userAgent === template.userAgent &&
+      config.browserFingerprint.locale === template.browserFingerprint.locale &&
+      config.browserFingerprint.timezone === template.browserFingerprint.timezone &&
+      config.browserFingerprint.viewport.width === template.browserFingerprint.viewport.width &&
+      config.browserFingerprint.viewport.height === template.browserFingerprint.viewport.height &&
+      config.userBehavior.minWaitTime === template.userBehavior.minWaitTime &&
+      config.userBehavior.maxWaitTime === template.userBehavior.maxWaitTime
+    );
   }
 }
 

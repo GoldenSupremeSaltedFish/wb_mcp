@@ -29,7 +29,11 @@
     "format": "prettier --write src/**/*.ts",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "template:setup": "ts-node src/tools/template-setup.ts setup",
+    "template:list": "ts-node src/tools/template-setup.ts list",
+    "template:show": "ts-node src/tools/template-setup.ts show",
+    "template:validate": "ts-node src/tools/template-setup.ts validate"
   },
   "keywords": [
     "weibo",
