@@ -2,9 +2,38 @@
   "weibo": {
     "accessToken": "",
     "cookie": "",
-    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "rateLimit": 10,
-    "requestInterval": 1000
+    "requestInterval": 1000,
+    "browserFingerprint": {
+      "locale": "zh-CN",
+      "timezone": "Asia/Shanghai",
+      "timezoneOffset": -480,
+      "geolocation": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "accuracy": 100
+      },
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "screen": {
+        "width": 1920,
+        "height": 1080,
+        "colorDepth": 24
+      },
+      "platform": "Win32",
+      "languages": ["zh-CN", "zh", "en-US", "en"]
+    },
+    "userBehavior": {
+      "minWaitTime": 2000,
+      "maxWaitTime": 5000,
+      "simulateMouseMove": true,
+      "simulateFocus": true,
+      "simulateScroll": true,
+      "randomDelay": true
+    }
   },
   "mcp": {
     "port": 3000,

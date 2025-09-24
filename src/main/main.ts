@@ -71,15 +71,22 @@ class WeiboMCPApp {
   }
 
   private createHiddenWindow(): void {
+    const config = configManager.getWeiboConfig();
+    
     this.hiddenWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
+      width: config.browserFingerprint.viewport.width,
+      height: config.browserFingerprint.viewport.height,
       show: false, // 隐藏运行
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
       },
     });
+
+    // 设置用户代理
+    if (config.userAgent) {
+      this.hiddenWindow.webContents.setUserAgent(config.userAgent);
+    }
 
     // 加载微博页面
     this.hiddenWindow.loadURL('https://weibo.com');

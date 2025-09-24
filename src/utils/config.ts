@@ -2,12 +2,45 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
 
+export interface BrowserFingerprint {
+  locale: string;
+  timezone: string;
+  timezoneOffset: number;
+  geolocation: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  };
+  viewport: {
+    width: number;
+    height: number;
+  };
+  screen: {
+    width: number;
+    height: number;
+    colorDepth: number;
+  };
+  platform: string;
+  languages: string[];
+}
+
+export interface UserBehavior {
+  minWaitTime: number;
+  maxWaitTime: number;
+  simulateMouseMove: boolean;
+  simulateFocus: boolean;
+  simulateScroll: boolean;
+  randomDelay: boolean;
+}
+
 export interface WeiboConfig {
   accessToken?: string;
   cookie?: string;
   userAgent: string;
   rateLimit: number;
   requestInterval: number;
+  browserFingerprint: BrowserFingerprint;
+  userBehavior: UserBehavior;
 }
 
 export interface MCPConfig {
@@ -43,9 +76,38 @@ class ConfigManager {
       weibo: {
         accessToken: process.env['WEIBO_ACCESS_TOKEN'] || '',
         cookie: process.env['WEIBO_COOKIE'] || '',
-        userAgent: process.env['WEIBO_USER_AGENT'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        userAgent: process.env['WEIBO_USER_AGENT'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         rateLimit: parseInt(process.env['REQUEST_RATE_LIMIT'] || '10'),
         requestInterval: parseInt(process.env['REQUEST_INTERVAL_MS'] || '1000'),
+        browserFingerprint: {
+          locale: process.env['BROWSER_LOCALE'] || 'zh-CN',
+          timezone: process.env['BROWSER_TIMEZONE'] || 'Asia/Shanghai',
+          timezoneOffset: parseInt(process.env['BROWSER_TIMEZONE_OFFSET'] || '-480'),
+          geolocation: {
+            latitude: parseFloat(process.env['BROWSER_LATITUDE'] || '39.9042'),
+            longitude: parseFloat(process.env['BROWSER_LONGITUDE'] || '116.4074'),
+            accuracy: parseInt(process.env['BROWSER_ACCURACY'] || '100'),
+          },
+          viewport: {
+            width: parseInt(process.env['BROWSER_VIEWPORT_WIDTH'] || '1920'),
+            height: parseInt(process.env['BROWSER_VIEWPORT_HEIGHT'] || '1080'),
+          },
+          screen: {
+            width: parseInt(process.env['BROWSER_SCREEN_WIDTH'] || '1920'),
+            height: parseInt(process.env['BROWSER_SCREEN_HEIGHT'] || '1080'),
+            colorDepth: parseInt(process.env['BROWSER_COLOR_DEPTH'] || '24'),
+          },
+          platform: process.env['BROWSER_PLATFORM'] || 'Win32',
+          languages: (process.env['BROWSER_LANGUAGES'] || 'zh-CN,zh,en-US,en').split(','),
+        },
+        userBehavior: {
+          minWaitTime: parseInt(process.env['USER_MIN_WAIT_TIME'] || '2000'),
+          maxWaitTime: parseInt(process.env['USER_MAX_WAIT_TIME'] || '5000'),
+          simulateMouseMove: process.env['USER_SIMULATE_MOUSE'] !== 'false',
+          simulateFocus: process.env['USER_SIMULATE_FOCUS'] !== 'false',
+          simulateScroll: process.env['USER_SIMULATE_SCROLL'] !== 'false',
+          randomDelay: process.env['USER_RANDOM_DELAY'] !== 'false',
+        },
       },
       mcp: {
         port: parseInt(process.env['MCP_SERVER_PORT'] || '3000'),

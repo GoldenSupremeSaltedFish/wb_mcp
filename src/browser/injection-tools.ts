@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { browserManager } from './browser-manager';
+import { configManager } from '../utils/config';
 
 export interface InjectionResult {
   success: boolean;
@@ -419,8 +420,17 @@ class InjectionTools {
         try {
           const readyState = await browserManager.executeJavaScript('document.readyState');
           if (readyState === 'complete') {
-            // 额外等待一下确保动态内容加载完成
-            setTimeout(resolve, 1000);
+            // 额外等待一下确保动态内容加载完成，并模拟用户行为
+            const config = configManager.getWeiboConfig();
+            const behavior = config.userBehavior;
+            
+            if (behavior.randomDelay) {
+              const waitTime = Math.random() * (behavior.maxWaitTime - behavior.minWaitTime) + behavior.minWaitTime;
+              logger.info(`页面加载完成，模拟用户等待 ${Math.round(waitTime)}ms`);
+              setTimeout(resolve, waitTime);
+            } else {
+              setTimeout(resolve, 2000); // 默认等待2秒
+            }
             return;
           }
           

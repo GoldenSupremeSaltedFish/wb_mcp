@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { configManager } from '../utils/config';
+import { configManager, BrowserFingerprint, UserBehavior } from '../utils/config';
 
 // 条件导入Electron模块
 let BrowserWindow: any = null;
@@ -120,8 +120,8 @@ class BrowserManager {
     const config = configManager.getWeiboConfig();
     
     this.weiboWindow = new BrowserWindow({
-      width: 1200,
-      height: 800,
+      width: config.browserFingerprint.viewport.width,
+      height: config.browserFingerprint.viewport.height,
       show: false, // 默认隐藏
       webPreferences: {
         nodeIntegration: false,
@@ -135,6 +135,9 @@ class BrowserManager {
     if (config.userAgent) {
       this.weiboWindow.webContents.setUserAgent(config.userAgent);
     }
+
+    // 设置浏览器指纹
+    await this.setupBrowserFingerprint(config.browserFingerprint);
 
     // 监听页面导航事件
     this.weiboWindow.webContents.on('did-navigate', (_event: any, url: string) => {
@@ -163,6 +166,123 @@ class BrowserManager {
     logger.info('微博浏览器窗口创建成功');
   }
 
+  private async setupBrowserFingerprint(fingerprint: BrowserFingerprint): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      // 等待页面加载完成后再设置指纹
+      this.weiboWindow.webContents.once('did-finish-load', async () => {
+        await this.injectBrowserFingerprint(fingerprint);
+      });
+    } catch (error) {
+      logger.error('设置浏览器指纹失败:', error);
+    }
+  }
+
+  private async injectBrowserFingerprint(fingerprint: BrowserFingerprint): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      const fingerprintScript = `
+        (function() {
+          // 设置语言和地区
+          Object.defineProperty(navigator, 'language', {
+            get: () => '${fingerprint.locale}',
+            configurable: true
+          });
+          
+          Object.defineProperty(navigator, 'languages', {
+            get: () => ${JSON.stringify(fingerprint.languages)},
+            configurable: true
+          });
+
+          // 设置平台
+          Object.defineProperty(navigator, 'platform', {
+            get: () => '${fingerprint.platform}',
+            configurable: true
+          });
+
+          // 设置时区
+          const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+          Date.prototype.getTimezoneOffset = function() {
+            return ${fingerprint.timezoneOffset};
+          };
+
+          // 设置屏幕信息
+          Object.defineProperty(screen, 'width', {
+            get: () => ${fingerprint.screen.width},
+            configurable: true
+          });
+          
+          Object.defineProperty(screen, 'height', {
+            get: () => ${fingerprint.screen.height},
+            configurable: true
+          });
+          
+          Object.defineProperty(screen, 'colorDepth', {
+            get: () => ${fingerprint.screen.colorDepth},
+            configurable: true
+          });
+
+          // 设置地理位置
+          if (navigator.geolocation) {
+            const originalGetCurrentPosition = navigator.geolocation.getCurrentPosition;
+            navigator.geolocation.getCurrentPosition = function(success, error, options) {
+              if (success) {
+                success({
+                  coords: {
+                    latitude: ${fingerprint.geolocation.latitude},
+                    longitude: ${fingerprint.geolocation.longitude},
+                    accuracy: ${fingerprint.geolocation.accuracy},
+                    altitude: null,
+                    altitudeAccuracy: null,
+                    heading: null,
+                    speed: null
+                  },
+                  timestamp: Date.now()
+                });
+              }
+            };
+          }
+
+          // 设置视口大小
+          Object.defineProperty(window, 'innerWidth', {
+            get: () => ${fingerprint.viewport.width},
+            configurable: true
+          });
+          
+          Object.defineProperty(window, 'innerHeight', {
+            get: () => ${fingerprint.viewport.height},
+            configurable: true
+          });
+
+          // 设置outerWidth和outerHeight
+          Object.defineProperty(window, 'outerWidth', {
+            get: () => ${fingerprint.viewport.width},
+            configurable: true
+          });
+          
+          Object.defineProperty(window, 'outerHeight', {
+            get: () => ${fingerprint.viewport.height},
+            configurable: true
+          });
+
+          console.log('浏览器指纹设置完成:', {
+            locale: '${fingerprint.locale}',
+            timezone: '${fingerprint.timezone}',
+            platform: '${fingerprint.platform}',
+            languages: ${JSON.stringify(fingerprint.languages)}
+          });
+        })();
+      `;
+
+      await this.weiboWindow.webContents.executeJavaScript(fingerprintScript);
+      logger.info('浏览器指纹注入成功');
+    } catch (error) {
+      logger.error('注入浏览器指纹失败:', error);
+    }
+  }
+
   private handleNavigation(type: 'navigate' | 'navigate-in-page', url: string): void {
     const event: NavigationEvent = {
       url,
@@ -189,6 +309,9 @@ class BrowserManager {
     
     // 注入检测脚本
     this.injectDetectionScripts();
+    
+    // 模拟用户行为
+    this.simulateUserBehavior();
     
     // 检查登录状态
     this.checkLoginStatus();
@@ -278,6 +401,136 @@ class BrowserManager {
       logger.info('检测脚本注入成功');
     } catch (error) {
       logger.error('注入检测脚本失败:', error);
+    }
+  }
+
+  private async simulateUserBehavior(): Promise<void> {
+    const config = configManager.getWeiboConfig();
+    const behavior = config.userBehavior;
+
+    try {
+      // 随机等待时间
+      if (behavior.randomDelay) {
+        const waitTime = Math.random() * (behavior.maxWaitTime - behavior.minWaitTime) + behavior.minWaitTime;
+        logger.info(`模拟用户等待 ${Math.round(waitTime)}ms`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+
+      // 模拟焦点事件
+      if (behavior.simulateFocus) {
+        await this.simulateFocusEvents();
+      }
+
+      // 模拟鼠标移动
+      if (behavior.simulateMouseMove) {
+        await this.simulateMouseMovement();
+      }
+
+      // 模拟滚动
+      if (behavior.simulateScroll) {
+        await this.simulateScrolling();
+      }
+
+      logger.info('用户行为模拟完成');
+    } catch (error) {
+      logger.error('用户行为模拟失败:', error);
+    }
+  }
+
+  private async simulateFocusEvents(): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      const focusScript = `
+        (function() {
+          // 模拟窗口焦点
+          window.focus();
+          document.body.focus();
+          
+          // 模拟焦点事件
+          const focusEvent = new Event('focus', { bubbles: true });
+          window.dispatchEvent(focusEvent);
+          document.dispatchEvent(focusEvent);
+          
+          console.log('焦点事件模拟完成');
+        })();
+      `;
+      
+      await this.weiboWindow.webContents.executeJavaScript(focusScript);
+    } catch (error) {
+      logger.error('模拟焦点事件失败:', error);
+    }
+  }
+
+  private async simulateMouseMovement(): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      const mouseScript = `
+        (function() {
+          // 生成随机鼠标位置
+          const x = Math.random() * window.innerWidth;
+          const y = Math.random() * window.innerHeight;
+          
+          // 创建鼠标移动事件
+          const mouseMoveEvent = new MouseEvent('mousemove', {
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true
+          });
+          
+          document.dispatchEvent(mouseMoveEvent);
+          
+          // 模拟鼠标悬停
+          const mouseOverEvent = new MouseEvent('mouseover', {
+            clientX: x,
+            clientY: y,
+            bubbles: true,
+            cancelable: true
+          });
+          
+          document.dispatchEvent(mouseOverEvent);
+          
+          console.log('鼠标移动模拟完成:', { x: Math.round(x), y: Math.round(y) });
+        })();
+      `;
+      
+      await this.weiboWindow.webContents.executeJavaScript(mouseScript);
+    } catch (error) {
+      logger.error('模拟鼠标移动失败:', error);
+    }
+  }
+
+  private async simulateScrolling(): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      const scrollScript = `
+        (function() {
+          // 随机滚动距离
+          const scrollY = Math.random() * 500 + 100;
+          
+          // 平滑滚动
+          window.scrollTo({
+            top: scrollY,
+            behavior: 'smooth'
+          });
+          
+          // 模拟滚动事件
+          setTimeout(() => {
+            const scrollEvent = new Event('scroll', { bubbles: true });
+            window.dispatchEvent(scrollEvent);
+            document.dispatchEvent(scrollEvent);
+            
+            console.log('滚动模拟完成:', { scrollY: Math.round(scrollY) });
+          }, 500);
+        })();
+      `;
+      
+      await this.weiboWindow.webContents.executeJavaScript(scrollScript);
+    } catch (error) {
+      logger.error('模拟滚动失败:', error);
     }
   }
 
