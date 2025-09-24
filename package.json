@@ -1,7 +1,7 @@
 {
   "name": "wb_mcp",
   "version": "1.0.0",
-  "description": "微博 MCP 工程 - 基于 Electron 的微博数据采集和 MCP 服务",
+  "description": "微博生活助理 MCP 服务 - 基于 Electron 的智能微博生活助理工具",
   "main": "dist/index.js",
   "bin": {
     "wb-mcp": "./dist/index.js"
@@ -39,13 +39,16 @@
     "weibo",
     "mcp",
     "electron",
-    "data-collection"
+    "life-assistant",
+    "social-media",
+    "automation",
+    "personal-assistant"
   ],
   "author": "",
   "license": "MIT",
   "build": {
     "appId": "com.weibo.mcp",
-    "productName": "微博 MCP 服务",
+    "productName": "微博生活助理",
     "directories": {
       "output": "dist-electron"
     },
@@ -119,7 +122,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "微博 MCP 服务"
+      "shortcutName": "微博生活助理"
     },
     "publish": {
       "provider": "github",

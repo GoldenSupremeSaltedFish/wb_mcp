@@ -1,21 +1,21 @@
-# 配置模板使用指南
+# 微博生活助理配置模板使用指南
 
 ## 概述
 
-微博MCP项目现在支持配置模板系统，让用户可以通过简单的选择来应用不同的反检测策略，无需手动配置复杂的参数。
+微博生活助理MCP服务现在支持配置模板系统，让用户可以通过简单的选择来配置不同的用户行为模式，帮助生活助理更好地模拟真实用户行为，提供更自然的社交互动体验。
 
 ## 快速开始
 
 ### 1. 使用模板设置工具
 
 ```bash
-# 运行模板设置向导
+# 运行生活助理配置向导
 npm run template:setup
 
-# 查看所有可用模板
+# 查看所有可用行为模板
 npm run template:list
 
-# 查看当前配置
+# 查看当前生活助理配置
 npm run template:show
 
 # 验证当前配置
@@ -37,7 +37,7 @@ npm run template:setup mobile
 # 企业用户模式（保守设置）
 npm run template:setup enterprise
 
-# 隐身模式（高度反检测）
+# 隐身模式（高度反检测，推荐）
 npm run template:setup stealth
 ```
 
@@ -46,11 +46,12 @@ npm run template:setup stealth
 ### 🖥️ 桌面用户模板
 
 #### 普通桌面用户 (`desktop_normal`)
-- **适用场景**: 日常使用，适合大多数用户
+- **适用场景**: 日常社交互动，适合大多数用户
 - **特点**: 标准1920x1080分辨率，中等等待时间
 - **UserAgent**: Chrome 120 Windows 10
 - **等待时间**: 2-5秒随机
 - **行为模拟**: 完整（鼠标、焦点、滚动）
+- **生活助理**: 自然的评论回复、点赞互动
 
 #### 高分辨率桌面用户 (`desktop_high_res`)
 - **适用场景**: 专业用户，高分辨率显示器
@@ -87,11 +88,12 @@ npm run template:setup stealth
 ### 🥷 隐身模式模板
 
 #### 隐身模式 (`stealth_mode`)
-- **适用场景**: 需要高度反检测的场景
-- **特点**: 标准分辨率，极慢节奏
+- **适用场景**: 需要高度反检测的场景，推荐使用
+- **特点**: 标准分辨率，极慢节奏，最真实
 - **UserAgent**: Chrome 120 Windows 10
 - **等待时间**: 5-12秒随机
 - **行为模拟**: 完整，最真实
+- **生活助理**: 最自然的社交互动，不易被检测
 
 ### ⚙️ 自定义模板
 
@@ -151,7 +153,7 @@ npm run template:setup stealth
 2. **专业用户**: 使用 `desktop_high_res` 或 `professional`
 3. **移动端测试**: 使用 `mobile_android` 或 `mobile_ios`
 4. **企业环境**: 使用 `enterprise_user` 或 `enterprise`
-5. **高风险场景**: 使用 `stealth_mode` 或 `stealth`
+5. **推荐使用**: 使用 `stealth_mode` 或 `stealth`（最安全）
 6. **快速测试**: 使用 `fast_mode`
 
 ### 配置验证
@@ -285,3 +287,4 @@ const customTemplate = ConfigTemplateManager.createCustomTemplate(
 - 支持快速选择和交互式设置
 - 支持配置验证和自定义模板
 - 支持环境变量覆盖
+- 专为微博生活助理优化，提供自然的社交互动体验

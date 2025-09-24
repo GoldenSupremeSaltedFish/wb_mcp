@@ -40,6 +40,36 @@ export interface WeiboComment {
   replyCount: number;
 }
 
+export interface PostWeiboResult {
+  success: boolean;
+  postId?: string;
+  message?: string;
+}
+
+export interface LikeResult {
+  success: boolean;
+  liked: boolean;
+  message?: string;
+}
+
+export interface FollowResult {
+  success: boolean;
+  followed: boolean;
+  message?: string;
+}
+
+export interface Mention {
+  id: string;
+  text: string;
+  user: {
+    id: string;
+    name: string;
+    avatar: string;
+  };
+  postId: string;
+  createdAt: string;
+}
+
 class WeiboAPI {
   private client: AxiosInstance;
 
@@ -319,6 +349,131 @@ class WeiboAPI {
     } catch (error) {
       logger.error('刷新访问令牌失败:', error);
       return null;
+    }
+  }
+
+  // 生活助理功能方法
+
+  public async postWeibo(content: string, images?: string[], location?: string): Promise<PostWeiboResult> {
+    try {
+      logger.logWeiboOperation('发布微博', { content, images, location });
+      
+      // 这里应该调用实际的微博发布 API
+      // 暂时返回模拟结果
+      return {
+        success: true,
+        postId: `post_${Date.now()}`,
+        message: '微博发布成功',
+      };
+    } catch (error) {
+      logger.error('发布微博失败:', error);
+      throw error;
+    }
+  }
+
+  public async replyComment(postId: string, commentId: string, reply: string): Promise<PostWeiboResult> {
+    try {
+      logger.logWeiboOperation('回复评论', { postId, commentId, reply });
+      
+      // 这里应该调用实际的评论回复 API
+      return {
+        success: true,
+        postId: `reply_${Date.now()}`,
+        message: '评论回复成功',
+      };
+    } catch (error) {
+      logger.error('回复评论失败:', error);
+      throw error;
+    }
+  }
+
+  public async likePost(postId: string): Promise<LikeResult> {
+    try {
+      logger.logWeiboOperation('点赞微博', { postId });
+      
+      // 这里应该调用实际的点赞 API
+      return {
+        success: true,
+        liked: true,
+        message: '点赞成功',
+      };
+    } catch (error) {
+      logger.error('点赞微博失败:', error);
+      throw error;
+    }
+  }
+
+  public async likeComment(commentId: string): Promise<LikeResult> {
+    try {
+      logger.logWeiboOperation('点赞评论', { commentId });
+      
+      // 这里应该调用实际的评论点赞 API
+      return {
+        success: true,
+        liked: true,
+        message: '评论点赞成功',
+      };
+    } catch (error) {
+      logger.error('点赞评论失败:', error);
+      throw error;
+    }
+  }
+
+  public async followUser(userId: string): Promise<FollowResult> {
+    try {
+      logger.logWeiboOperation('关注用户', { userId });
+      
+      // 这里应该调用实际的关注 API
+      return {
+        success: true,
+        followed: true,
+        message: '关注用户成功',
+      };
+    } catch (error) {
+      logger.error('关注用户失败:', error);
+      throw error;
+    }
+  }
+
+  public async unfollowUser(userId: string): Promise<FollowResult> {
+    try {
+      logger.logWeiboOperation('取消关注用户', { userId });
+      
+      // 这里应该调用实际的取消关注 API
+      return {
+        success: true,
+        followed: false,
+        message: '取消关注成功',
+      };
+    } catch (error) {
+      logger.error('取消关注用户失败:', error);
+      throw error;
+    }
+  }
+
+  public async getMentions(limit: number = 10): Promise<Mention[]> {
+    try {
+      logger.logWeiboOperation('获取@我的消息', { limit });
+      
+      // 这里应该调用实际的@消息 API
+      // 暂时返回模拟数据
+      return [];
+    } catch (error) {
+      logger.error('获取@我的消息失败:', error);
+      throw error;
+    }
+  }
+
+  public async getMyComments(limit: number = 10): Promise<WeiboComment[]> {
+    try {
+      logger.logWeiboOperation('获取我的评论', { limit });
+      
+      // 这里应该调用实际的我的评论 API
+      // 暂时返回模拟数据
+      return [];
+    } catch (error) {
+      logger.error('获取我的评论失败:', error);
+      throw error;
     }
   }
 }

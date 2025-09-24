@@ -18,7 +18,7 @@ class MCPServer {
   constructor() {
     this.server = new Server(
       {
-        name: 'weibo-mcp-server',
+        name: 'weibo-life-assistant-mcp',
         version: '1.0.0',
       },
       {
@@ -35,7 +35,7 @@ class MCPServer {
   private setupHandlers(): void {
     // 列出可用工具
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      logger.logMCPService('列出工具请求');
+      logger.logMCPService('列出生活助理功能');
       return {
         tools: weiboTools.getAvailableTools(),
       };
@@ -44,14 +44,14 @@ class MCPServer {
     // 执行工具
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-      logger.logMCPService('执行工具', { name, args });
+      logger.logMCPService('执行生活助理功能', { name, args });
 
       try {
         const result = await weiboTools.executeTool(name, args);
-        logger.logMCPService('工具执行成功', { name, result });
+        logger.logMCPService('生活助理功能执行成功', { name, result });
         return result;
       } catch (error) {
-        logger.error('工具执行失败', { name, error });
+        logger.error('生活助理功能执行失败', { name, error });
         throw error;
       }
     });

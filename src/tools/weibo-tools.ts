@@ -2,84 +2,71 @@ import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
 import { weiboAPI } from '../api/weibo-api';
-import { taskScheduler } from '../utils/scheduler';
 
-export interface SearchPostsParams {
-  keyword: string;
-  limit?: number;
-  sort?: 'time' | 'hot';
+export interface PostWeiboParams {
+  content: string;
+  images?: string[];
+  location?: string;
 }
 
-export interface GetHotTopicsParams {
-  limit?: number;
-}
-
-export interface GetCommentsParams {
+export interface ReplyCommentParams {
   postId: string;
+  commentId: string;
+  reply: string;
+}
+
+export interface LikePostParams {
+  postId: string;
+}
+
+export interface LikeCommentParams {
+  commentId: string;
+}
+
+export interface FollowUserParams {
+  userId: string;
+}
+
+export interface UnfollowUserParams {
+  userId: string;
+}
+
+export interface GetMentionsParams {
   limit?: number;
 }
 
-export interface PostCommentParams {
-  postId: string;
-  text: string;
-}
-
-export interface ExportDataParams {
-  format: 'json' | 'csv';
-  filename: string;
-  data: any[];
-}
-
-export interface TaskSchedulerParams {
-  action: 'status' | 'enable' | 'disable' | 'results';
-  taskId?: string;
+export interface GetMyCommentsParams {
   limit?: number;
 }
 
 class WeiboTools {
   private tools: Tool[] = [
     {
-      name: 'search_posts',
-      description: '搜索微博内容',
+      name: 'post_weibo',
+      description: '发布微博内容',
       inputSchema: {
         type: 'object',
         properties: {
-          keyword: {
+          content: {
             type: 'string',
-            description: '搜索关键词',
+            description: '微博内容',
           },
-          limit: {
-            type: 'number',
-            description: '返回结果数量限制，默认 20',
-            default: 20,
+          images: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '图片路径列表（可选）',
           },
-          sort: {
+          location: {
             type: 'string',
-            enum: ['time', 'hot'],
-            description: '排序方式：time(时间) 或 hot(热度)',
-            default: 'time',
+            description: '位置信息（可选）',
           },
         },
-        required: ['keyword'],
+        required: ['content'],
       },
     },
     {
-      name: 'get_hot_topics',
-      description: '获取微博热搜榜',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          limit: {
-            type: 'number',
-            description: '返回结果数量限制，默认 50',
-            default: 50,
-          },
-        },
-      },
-    },
-    {
-      name: 'get_comments',
-      description: '获取微博评论',
+      name: 'reply_comment',
+      description: '智能回复评论',
       inputSchema: {
         type: 'object',
         properties: {
@@ -87,86 +74,108 @@ class WeiboTools {
             type: 'string',
             description: '微博 ID',
           },
-          limit: {
-            type: 'number',
-            description: '返回结果数量限制，默认 20',
-            default: 20,
+          commentId: {
+            type: 'string',
+            description: '评论 ID',
+          },
+          reply: {
+            type: 'string',
+            description: '回复内容',
+          },
+        },
+        required: ['postId', 'commentId', 'reply'],
+      },
+    },
+    {
+      name: 'like_post',
+      description: '点赞微博',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: {
+            type: 'string',
+            description: '微博 ID',
           },
         },
         required: ['postId'],
       },
     },
     {
-      name: 'post_comment',
-      description: '发布微博评论（需要用户确认）',
+      name: 'like_comment',
+      description: '点赞评论',
       inputSchema: {
         type: 'object',
         properties: {
-          postId: {
+          commentId: {
             type: 'string',
-            description: '微博 ID',
-          },
-          text: {
-            type: 'string',
-            description: '评论内容',
+            description: '评论 ID',
           },
         },
-        required: ['postId', 'text'],
+        required: ['commentId'],
       },
     },
     {
-      name: 'export_data',
-      description: '导出数据为 JSON 或 CSV 格式',
+      name: 'follow_user',
+      description: '关注用户',
       inputSchema: {
         type: 'object',
         properties: {
-          format: {
+          userId: {
             type: 'string',
-            enum: ['json', 'csv'],
-            description: '导出格式',
-          },
-          filename: {
-            type: 'string',
-            description: '文件名',
-          },
-          data: {
-            type: 'array',
-            description: '要导出的数据',
+            description: '用户 ID',
           },
         },
-        required: ['format', 'filename', 'data'],
+        required: ['userId'],
+      },
+    },
+    {
+      name: 'unfollow_user',
+      description: '取消关注用户',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          userId: {
+            type: 'string',
+            description: '用户 ID',
+          },
+        },
+        required: ['userId'],
+      },
+    },
+    {
+      name: 'get_mentions',
+      description: '获取@我的消息',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: '返回结果数量限制，默认 10',
+            default: 10,
+          },
+        },
+      },
+    },
+    {
+      name: 'get_my_comments',
+      description: '获取我的评论',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: '返回结果数量限制，默认 10',
+            default: 10,
+          },
+        },
       },
     },
     {
       name: 'get_status',
-      description: '获取服务运行状态',
+      description: '获取生活助理状态',
       inputSchema: {
         type: 'object',
         properties: {},
-      },
-    },
-    {
-      name: 'task_scheduler',
-      description: '任务调度器管理',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: {
-            type: 'string',
-            enum: ['status', 'enable', 'disable', 'results'],
-            description: '操作类型：status(状态), enable(启用), disable(禁用), results(结果)',
-          },
-          taskId: {
-            type: 'string',
-            description: '任务 ID（启用/禁用时需要）',
-          },
-          limit: {
-            type: 'number',
-            description: '结果数量限制（获取结果时使用）',
-            default: 50,
-          },
-        },
-        required: ['action'],
       },
     },
   ];
@@ -176,40 +185,46 @@ class WeiboTools {
   }
 
   public async executeTool(name: string, args: any): Promise<CallToolResult> {
-    logger.logWeiboOperation(`执行工具: ${name}`, args);
+    logger.logWeiboOperation(`执行生活助理功能: ${name}`, args);
 
     switch (name) {
-      case 'search_posts':
-        return await this.searchPosts(args as SearchPostsParams);
+      case 'post_weibo':
+        return await this.postWeibo(args as PostWeiboParams);
       
-      case 'get_hot_topics':
-        return await this.getHotTopics(args as GetHotTopicsParams);
+      case 'reply_comment':
+        return await this.replyComment(args as ReplyCommentParams);
       
-      case 'get_comments':
-        return await this.getComments(args as GetCommentsParams);
+      case 'like_post':
+        return await this.likePost(args as LikePostParams);
       
-      case 'post_comment':
-        return await this.postComment(args as PostCommentParams);
+      case 'like_comment':
+        return await this.likeComment(args as LikeCommentParams);
       
-      case 'export_data':
-        return await this.exportData(args as ExportDataParams);
+      case 'follow_user':
+        return await this.followUser(args as FollowUserParams);
+      
+      case 'unfollow_user':
+        return await this.unfollowUser(args as UnfollowUserParams);
+      
+      case 'get_mentions':
+        return await this.getMentions(args as GetMentionsParams);
+      
+      case 'get_my_comments':
+        return await this.getMyComments(args as GetMyCommentsParams);
       
       case 'get_status':
         return await this.getStatus();
       
-      case 'task_scheduler':
-        return await this.taskScheduler(args as TaskSchedulerParams);
-      
       default:
-        throw new Error(`未知工具: ${name}`);
+        throw new Error(`未知的生活助理功能: ${name}`);
     }
   }
 
-  private async searchPosts(params: SearchPostsParams): Promise<CallToolResult> {
-    const { keyword, limit = 20, sort = 'time' } = params;
+  private async postWeibo(params: PostWeiboParams): Promise<CallToolResult> {
+    const { content, images, location } = params;
     
     try {
-      const posts = await weiboAPI.searchPosts(keyword, limit, sort);
+      const result = await weiboAPI.postWeibo(content, images, location);
       
       return {
         content: [
@@ -217,19 +232,14 @@ class WeiboTools {
             type: 'text',
             text: JSON.stringify({
               success: true,
-              data: posts,
-              meta: {
-                keyword,
-                limit,
-                sort,
-                count: posts.length,
-              },
+              data: result,
+              message: '微博发布成功',
             }, null, 2),
           },
         ],
       };
     } catch (error) {
-      logger.error('搜索微博失败:', error);
+      logger.error('发布微博失败:', error);
       return {
         content: [
           {
@@ -245,11 +255,11 @@ class WeiboTools {
     }
   }
 
-  private async getHotTopics(params: GetHotTopicsParams): Promise<CallToolResult> {
-    const { limit = 50 } = params;
+  private async replyComment(params: ReplyCommentParams): Promise<CallToolResult> {
+    const { postId, commentId, reply } = params;
     
     try {
-      const topics = await weiboAPI.getHotTopics(limit);
+      const result = await weiboAPI.replyComment(postId, commentId, reply);
       
       return {
         content: [
@@ -257,17 +267,14 @@ class WeiboTools {
             type: 'text',
             text: JSON.stringify({
               success: true,
-              data: topics,
-              meta: {
-                limit,
-                count: topics.length,
-              },
+              data: result,
+              message: '评论回复成功',
             }, null, 2),
           },
         ],
       };
     } catch (error) {
-      logger.error('获取热搜榜失败:', error);
+      logger.error('回复评论失败:', error);
       return {
         content: [
           {
@@ -283,11 +290,189 @@ class WeiboTools {
     }
   }
 
-  private async getComments(params: GetCommentsParams): Promise<CallToolResult> {
-    const { postId, limit = 20 } = params;
+  private async likePost(params: LikePostParams): Promise<CallToolResult> {
+    const { postId } = params;
     
     try {
-      const comments = await weiboAPI.getComments(postId, limit);
+      const result = await weiboAPI.likePost(postId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: result,
+              message: '点赞成功',
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('点赞失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async likeComment(params: LikeCommentParams): Promise<CallToolResult> {
+    const { commentId } = params;
+    
+    try {
+      const result = await weiboAPI.likeComment(commentId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: result,
+              message: '评论点赞成功',
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('评论点赞失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async followUser(params: FollowUserParams): Promise<CallToolResult> {
+    const { userId } = params;
+    
+    try {
+      const result = await weiboAPI.followUser(userId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: result,
+              message: '关注用户成功',
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('关注用户失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async unfollowUser(params: UnfollowUserParams): Promise<CallToolResult> {
+    const { userId } = params;
+    
+    try {
+      const result = await weiboAPI.unfollowUser(userId);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: result,
+              message: '取消关注成功',
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('取消关注失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async getMentions(params: GetMentionsParams): Promise<CallToolResult> {
+    const { limit = 10 } = params;
+    
+    try {
+      const mentions = await weiboAPI.getMentions(limit);
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              data: mentions,
+              meta: {
+                limit,
+                count: mentions.length,
+              },
+            }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('获取@我的消息失败:', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : '未知错误',
+            }, null, 2),
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async getMyComments(params: GetMyCommentsParams): Promise<CallToolResult> {
+    const { limit = 10 } = params;
+    
+    try {
+      const comments = await weiboAPI.getMyComments(limit);
       
       return {
         content: [
@@ -297,7 +482,6 @@ class WeiboTools {
               success: true,
               data: comments,
               meta: {
-                postId,
                 limit,
                 count: comments.length,
               },
@@ -306,89 +490,7 @@ class WeiboTools {
         ],
       };
     } catch (error) {
-      logger.error('获取评论失败:', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error instanceof Error ? error.message : '未知错误',
-            }, null, 2),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async postComment(params: PostCommentParams): Promise<CallToolResult> {
-    const { postId, text } = params;
-    
-    try {
-      // 这里需要用户确认，避免自动发布
-      const result = await weiboAPI.postComment(postId, text, true);
-      
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: true,
-              data: result,
-              message: '评论发布成功（需要用户确认）',
-            }, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      logger.error('发布评论失败:', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error instanceof Error ? error.message : '未知错误',
-            }, null, 2),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private async exportData(params: ExportDataParams): Promise<CallToolResult> {
-    const { format, filename, data } = params;
-    
-    try {
-      const exportPath = configManager.getExportPath(filename);
-      let content: string;
-      
-      if (format === 'json') {
-        content = JSON.stringify(data, null, 2);
-      } else if (format === 'csv') {
-        content = this.convertToCSV(data);
-      } else {
-        throw new Error(`不支持的导出格式: ${format}`);
-      }
-      
-      // 这里应该写入文件，但为了简化，我们返回内容
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: true,
-              message: `数据已导出为 ${format} 格式`,
-              filename: exportPath,
-              content,
-            }, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      logger.error('导出数据失败:', error);
+      logger.error('获取我的评论失败:', error);
       return {
         content: [
           {
@@ -414,6 +516,7 @@ class WeiboTools {
           text: JSON.stringify({
             success: true,
             data: {
+              service: '微博生活助理',
               authenticated: configManager.isWeiboAuthenticated(),
               mcpServer: {
                 port: config.mcp.port,
@@ -423,7 +526,9 @@ class WeiboTools {
                 hasAccessToken: !!config.weibo.accessToken,
                 hasCookie: !!config.weibo.cookie,
                 rateLimit: config.weibo.rateLimit,
+                userBehavior: config.weibo.userBehavior,
               },
+              browserFingerprint: config.weibo.browserFingerprint,
               paths: {
                 dataDir: config.dataDir,
                 exportDir: config.exportDir,
@@ -434,123 +539,6 @@ class WeiboTools {
         },
       ],
     };
-  }
-
-  private async taskScheduler(params: TaskSchedulerParams): Promise<CallToolResult> {
-    const { action, taskId, limit = 50 } = params;
-    
-    try {
-      switch (action) {
-        case 'status':
-          const status = taskScheduler.getTaskStatus();
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: true,
-                  data: {
-                    running: taskScheduler.isSchedulerRunning(),
-                    tasks: status,
-                  },
-                }, null, 2),
-              },
-            ],
-          };
-        
-        case 'enable':
-          if (!taskId) {
-            throw new Error('启用任务需要提供 taskId');
-          }
-          const enabled = taskScheduler.enableTask(taskId);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: enabled,
-                  message: enabled ? `任务 ${taskId} 已启用` : `任务 ${taskId} 不存在`,
-                }, null, 2),
-              },
-            ],
-          };
-        
-        case 'disable':
-          if (!taskId) {
-            throw new Error('禁用任务需要提供 taskId');
-          }
-          const disabled = taskScheduler.disableTask(taskId);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: disabled,
-                  message: disabled ? `任务 ${taskId} 已禁用` : `任务 ${taskId} 不存在`,
-                }, null, 2),
-              },
-            ],
-          };
-        
-        case 'results':
-          const results = taskScheduler.getRecentResults(limit);
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  success: true,
-                  data: {
-                    results,
-                    count: results.length,
-                    limit,
-                  },
-                }, null, 2),
-              },
-            ],
-          };
-        
-        default:
-          throw new Error(`不支持的操作: ${action}`);
-      }
-    } catch (error) {
-      logger.error('任务调度器操作失败:', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              success: false,
-              error: error instanceof Error ? error.message : '未知错误',
-            }, null, 2),
-          },
-        ],
-        isError: true,
-      };
-    }
-  }
-
-  private convertToCSV(data: any[]): string {
-    if (!data || data.length === 0) {
-      return '';
-    }
-
-    const headers = Object.keys(data[0]);
-    const csvRows = [headers.join(',')];
-
-    for (const row of data) {
-      const values = headers.map(header => {
-        const value = row[header];
-        // 处理包含逗号或引号的值
-        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      });
-      csvRows.push(values.join(','));
-    }
-
-    return csvRows.join('\n');
   }
 }
 
