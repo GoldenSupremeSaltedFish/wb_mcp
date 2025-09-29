@@ -150,8 +150,10 @@ coverage/
 data/
 exports/
 
-# 配置文件（如果包含敏感信息）
-# config/config.json
+# 配置文件（包含敏感信息）
+config/config.json
+config/config.local.json
+config/weibo-config.json
 
 # 其他
 *.tgz

@@ -40,6 +40,9 @@ export interface WeiboConfig {
   userAgent: string;
   rateLimit: number;
   requestInterval: number;
+  xsrfToken?: string;
+  clientVersion?: string;
+  serverVersion?: string;
   browserFingerprint: BrowserFingerprint;
   userBehavior: UserBehavior;
 }
@@ -68,8 +71,15 @@ class ConfigManager {
   }
 
   private getConfigPath(): string {
-    // 使用当前工作目录下的 config 目录
-    return path.join(process.cwd(), 'config', 'config.json');
+    // 优先使用本地配置文件，如果不存在则使用默认配置
+    const localConfigPath = path.join(process.cwd(), 'config', 'config.local.json');
+    const defaultConfigPath = path.join(process.cwd(), 'config', 'config.json');
+    
+    if (fs.existsSync(localConfigPath)) {
+      return localConfigPath;
+    }
+    
+    return defaultConfigPath;
   }
 
   private getDefaultConfig(): AppConfig {

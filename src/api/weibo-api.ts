@@ -99,6 +99,21 @@ class WeiboAPI {
           config.headers['Cookie'] = weiboConfig.cookie;
         }
 
+        // 添加微博特定的请求头
+        config.headers['Accept'] = 'application/json, text/plain, */*';
+        config.headers['Accept-Encoding'] = 'gzip, deflate, br, zstd';
+        config.headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6';
+        config.headers['X-Requested-With'] = 'XMLHttpRequest';
+        config.headers['Sec-Fetch-Dest'] = 'empty';
+        config.headers['Sec-Fetch-Mode'] = 'cors';
+        config.headers['Sec-Fetch-Site'] = 'same-origin';
+        config.headers['Priority'] = 'u=1, i';
+        
+        // 添加XSRF Token
+        if (weiboConfig.xsrfToken) {
+          config.headers['X-XSRF-TOKEN'] = weiboConfig.xsrfToken;
+        }
+
         logger.logApiRequest(config.method?.toUpperCase() || 'GET', config.url || '');
         return config;
       },
