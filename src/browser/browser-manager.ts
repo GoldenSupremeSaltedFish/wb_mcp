@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { configManager, BrowserFingerprint, UserBehavior } from '../utils/config';
+import { configManager, BrowserFingerprint } from '../utils/config';
 
 // 条件导入Electron模块
 let BrowserWindow: any = null;

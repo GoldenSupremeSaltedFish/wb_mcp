@@ -2,7 +2,7 @@
 
 import { TemplateSelector } from '../utils/template-selector';
 import { configManager } from '../utils/config';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger';
 
 class TemplateSetupTool {
   public static async run(): Promise<void> {
