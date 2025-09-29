@@ -452,6 +452,156 @@ class InjectionTools {
   public getAvailableScripts(): string[] {
     return Array.from(this.injectionScripts.keys());
   }
+
+  /**
+   * 检查Electron环境是否可用
+   */
+  public isElectronAvailable(): boolean {
+    try {
+      // 检查Electron模块是否可用
+      const electron = require('electron');
+      return !!(electron && electron.BrowserWindow);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * 在页面上下文中执行JavaScript代码
+   * 这是网页版MCP的核心功能
+   */
+  public async executeInPageContext(script: string): Promise<any> {
+    try {
+      logger.logWeiboOperation('在页面上下文中执行脚本', { scriptLength: script.length });
+      
+      // 通过浏览器管理器执行脚本
+      const result = await browserManager.executeScript(script);
+      
+      if (result.success) {
+        logger.logWeiboOperation('页面脚本执行成功', { result: result.data });
+        return result.data;
+      } else {
+        logger.error('页面脚本执行失败:', result.error);
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      logger.error('执行页面脚本失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 观察页面XHR请求，获取真实的签名和token
+   */
+  public async observeXHRRequests(): Promise<any> {
+    try {
+      const script = `
+        (function() {
+          const originalXHR = window.XMLHttpRequest;
+          const requests = [];
+          
+          // 拦截XHR请求
+          window.XMLHttpRequest = function() {
+            const xhr = new originalXHR();
+            const originalOpen = xhr.open;
+            const originalSend = xhr.send;
+            
+            xhr.open = function(method, url, ...args) {
+              this._method = method;
+              this._url = url;
+              return originalOpen.apply(this, [method, url, ...args]);
+            };
+            
+            xhr.send = function(data) {
+              // 记录请求信息
+              requests.push({
+                method: this._method,
+                url: this._url,
+                headers: this.getAllResponseHeaders(),
+                data: data,
+                timestamp: Date.now()
+              });
+              
+              return originalSend.apply(this, [data]);
+            };
+            
+            return xhr;
+          };
+          
+          // 返回观察器
+          return {
+            getRequests: () => requests,
+            clearRequests: () => requests.length = 0
+          };
+        })()
+      `;
+      
+      return await this.executeInPageContext(script);
+    } catch (error) {
+      logger.error('设置XHR观察器失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取页面内的认证信息
+   */
+  public async getPageAuthInfo(): Promise<any> {
+    try {
+      const script = `
+        (function() {
+          try {
+            // 获取页面内的认证信息
+            const authInfo = {
+              cookies: document.cookie,
+              localStorage: {},
+              sessionStorage: {},
+              userInfo: null,
+              tokens: {}
+            };
+            
+            // 获取localStorage中的认证信息
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.includes('token') || key.includes('auth') || key.includes('user'))) {
+                authInfo.localStorage[key] = localStorage.getItem(key);
+              }
+            }
+            
+            // 获取sessionStorage中的认证信息
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              if (key && (key.includes('token') || key.includes('auth') || key.includes('user'))) {
+                authInfo.sessionStorage[key] = sessionStorage.getItem(key);
+              }
+            }
+            
+            // 获取用户信息
+            if (window.WB && window.WB.user) {
+              authInfo.userInfo = window.WB.user;
+            }
+            
+            // 获取页面内的token
+            const tokenElements = document.querySelectorAll('[data-token], [name*="token"], input[name*="csrf"]');
+            tokenElements.forEach(el => {
+              if (el.value) {
+                authInfo.tokens[el.name || el.getAttribute('data-token')] = el.value;
+              }
+            });
+            
+            return authInfo;
+          } catch (error) {
+            return { error: error.message };
+          }
+        })()
+      `;
+      
+      return await this.executeInPageContext(script);
+    } catch (error) {
+      logger.error('获取页面认证信息失败:', error);
+      throw error;
+    }
+  }
 }
 
 export const injectionTools = new InjectionTools();

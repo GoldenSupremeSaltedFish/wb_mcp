@@ -590,6 +590,43 @@ class BrowserManager {
     throw lastError || new Error('JavaScript 执行失败');
   }
 
+  /**
+   * 在页面上下文中执行脚本（网页版MCP核心功能）
+   */
+  public async executeScript(script: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      // 检查是否在Electron环境中
+      if (!BrowserWindow) {
+        logger.warn('不在Electron环境中，无法执行页面脚本');
+        return { 
+          success: false, 
+          error: '需要Electron环境才能执行页面脚本。请使用 pnpm run dev:electron 启动' 
+        };
+      }
+
+      if (!this.weiboWindow) {
+        // 如果浏览器窗口未初始化，尝试初始化
+        await this.initialize();
+      }
+
+      if (!this.weiboWindow) {
+        return { success: false, error: '浏览器窗口未初始化' };
+      }
+
+      // 页面加载检查（可选）
+      // await this.waitForNavigation();
+
+      // 执行脚本
+      const result = await this.executeJavaScript(script);
+      
+      return { success: true, data: result };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      logger.error('执行页面脚本失败:', error);
+      return { success: false, error: errorMessage };
+    }
+  }
+
   public showWindow(): void {
     if (this.weiboWindow) {
       this.weiboWindow.show();

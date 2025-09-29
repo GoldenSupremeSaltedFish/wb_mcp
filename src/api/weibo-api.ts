@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
 import { injectionTools } from '../browser/injection-tools';
-import { errorRecovery } from '../utils/error-recovery';
+// import { errorRecovery } from '../utils/error-recovery';
 
 export interface WeiboPost {
   id: string;
@@ -162,52 +162,42 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('搜索微博', { keyword, limit, sort });
       
-      // 尝试使用浏览器注入方式获取真实数据（带重试）
-      const injectionResult = await errorRecovery.retryBrowserOperation(async () => {
-        const result = await injectionTools.searchPosts(keyword, limit, sort);
-        if (result.success && result.data) {
-          // 转换注入工具返回的数据格式
-          return result.data.map((post: any) => ({
-            id: post.id,
-            text: post.text,
-            user: {
-              id: post.author.id,
-              name: post.author.name,
-              avatar: post.author.avatar,
-            },
-            createdAt: post.createdAt,
-            repostsCount: post.repostsCount,
-            commentsCount: post.commentsCount,
-            attitudesCount: post.attitudesCount,
-          }));
+      // 使用真实的微博API端点
+      const response = await this.client.get('https://m.weibo.cn/api/container/getIndex', {
+        params: {
+          containerid: '100103type=1&q=' + encodeURIComponent(keyword),
+          page_type: 'searchall',
+          page: 1
         }
-        throw new Error('注入工具返回失败');
       });
 
-      if (injectionResult.success && injectionResult.result) {
-        return injectionResult.result;
+      if (response.data && response.data.data && response.data.data.cards) {
+        const posts = response.data.data.cards
+          .filter((card: any) => card.card_type === 9)
+          .slice(0, limit)
+          .map((card: any) => {
+            const mblog = card.mblog;
+            return {
+              id: mblog.id,
+              text: mblog.text,
+              user: {
+                id: mblog.user.id,
+                name: mblog.user.screen_name,
+                avatar: mblog.user.profile_image_url,
+              },
+              createdAt: mblog.created_at,
+              repostsCount: mblog.reposts_count,
+              commentsCount: mblog.comments_count,
+              attitudesCount: mblog.attitudes_count,
+              images: mblog.pics ? mblog.pics.map((pic: any) => pic.url) : undefined,
+            };
+          });
+
+        logger.logWeiboOperation('搜索微博成功', { count: posts.length });
+        return posts;
       } else {
-        logger.warn('浏览器注入搜索失败，使用模拟数据:', injectionResult.error);
+        throw new Error('微博API搜索失败：' + (response.data?.msg || '未知错误'));
       }
-      
-      // 如果注入失败，返回模拟数据
-      const mockPosts: WeiboPost[] = [
-        {
-          id: '1',
-          text: `关于 "${keyword}" 的微博内容`,
-          user: {
-            id: 'user1',
-            name: '示例用户',
-            avatar: 'https://example.com/avatar.jpg',
-          },
-          createdAt: new Date().toISOString(),
-          repostsCount: 10,
-          commentsCount: 5,
-          attitudesCount: 20,
-        },
-      ];
-      
-      return mockPosts.slice(0, limit);
     } catch (error) {
       logger.error('搜索微博失败:', error);
       throw error;
@@ -218,34 +208,32 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('获取热搜榜', { limit });
       
-      // 尝试使用浏览器注入方式获取真实数据
-      try {
-        const result = await injectionTools.getHotTopics(limit);
-        if (result.success && result.data) {
-          return result.data.map((topic: any) => ({
-            id: topic.id,
-            title: topic.title,
-            hot: topic.hot,
-            url: topic.url,
-            rank: topic.rank,
-          }));
+      // 使用真实的微博热搜API
+      const response = await this.client.get('https://m.weibo.cn/api/container/getIndex', {
+        params: {
+          containerid: '106003type=25&t=3&disable_hot=1&filter_type=realtimehot',
+          title: '微博热搜榜',
+          page_type: 'searchall'
         }
-      } catch (injectionError) {
-        logger.warn('浏览器注入获取热搜失败，使用模拟数据:', injectionError);
+      });
+
+      if (response.data && response.data.data && response.data.data.cards) {
+        const topics = response.data.data.cards
+          .filter((card: any) => card.card_type === 11)
+          .slice(0, limit)
+          .map((card: any, index: number) => ({
+            id: card.desc?.trend_id || index.toString(),
+            title: card.desc?.trend_name || '未知话题',
+            hot: card.desc?.trend_num || 0,
+            url: card.desc?.trend_url || '',
+            rank: index + 1,
+          }));
+
+        logger.logWeiboOperation('获取热搜榜成功', { count: topics.length });
+        return topics;
+      } else {
+        throw new Error('获取热搜榜失败：' + (response.data?.msg || '未知错误'));
       }
-      
-      // 如果注入失败，返回模拟数据
-      const mockTopics: HotTopic[] = [
-        {
-          id: '1',
-          title: '示例热搜话题',
-          hot: 1000000,
-          url: 'https://weibo.com/hot/topic/1',
-          rank: 1,
-        },
-      ];
-      
-      return mockTopics.slice(0, limit);
     } catch (error) {
       logger.error('获取热搜榜失败:', error);
       throw error;
@@ -373,13 +361,62 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('发布微博', { content, images, location });
       
-      // 这里应该调用实际的微博发布 API
-      // 暂时返回模拟结果
-      return {
-        success: true,
-        postId: `post_${Date.now()}`,
-        message: '微博发布成功',
-      };
+      // 强制要求Electron环境，禁止降级
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+      
+      // 使用浏览器上下文执行JavaScript，复用页面内函数
+      const result = await injectionTools.executeInPageContext(`
+        (function() {
+          try {
+            // 在页面上下文中执行微博发布
+            // 复用页面内的认证状态和函数
+            
+            // 方法1: 直接调用页面内的微博发布函数
+            if (window.WB && window.WB.post) {
+              return window.WB.post({
+                content: '${content.replace(/'/g, "\\'")}',
+                images: ${images ? JSON.stringify(images) : 'null'},
+                location: '${location || ''}'
+              });
+            }
+            
+            // 方法2: 模拟用户操作，点击发布按钮
+            const textarea = document.querySelector('textarea[placeholder*="有什么新鲜事"], textarea[placeholder*="说点什么"]');
+            if (textarea) {
+              textarea.value = '${content.replace(/'/g, "\\'")}';
+              textarea.dispatchEvent(new Event('input', { bubbles: true }));
+              
+              // 触发change事件
+              textarea.dispatchEvent(new Event('change', { bubbles: true }));
+              
+              // 查找并点击发布按钮
+              const publishBtn = document.querySelector('button[title*="发布"], button[title*="发送"], .publish-btn, .send-btn');
+              if (publishBtn) {
+                publishBtn.click();
+                return { success: true, message: '微博发布成功（通过页面操作）' };
+              }
+            }
+            
+            // 方法3: 使用页面内的XHR拦截器获取真实请求
+            return { success: false, error: '未找到发布方法' };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        })()
+      `);
+
+      if (result.success) {
+        logger.logWeiboOperation('微博发布成功', { method: 'browser_context' });
+        return {
+          success: true,
+          postId: result.postId || `post_${Date.now()}`,
+          message: result.message || '微博发布成功',
+        };
+      } else {
+        throw new Error('微博发布失败：' + result.error);
+      }
     } catch (error) {
       logger.error('发布微博失败:', error);
       throw error;
@@ -406,12 +443,55 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('点赞微博', { postId });
       
-      // 这里应该调用实际的点赞 API
-      return {
-        success: true,
-        liked: true,
-        message: '点赞成功',
-      };
+      // 强制要求Electron环境，禁止降级
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+      
+      // 使用页面上下文执行点赞操作
+      const result = await injectionTools.executeInPageContext(`
+        (function() {
+          try {
+            // 方法1: 查找并点击点赞按钮
+            const likeBtn = document.querySelector('[data-id="${postId}"] .like-btn, [data-id="${postId}"] .attitude-btn');
+            if (likeBtn) {
+              likeBtn.click();
+              return { success: true, liked: true, message: '点赞成功（通过页面操作）' };
+            }
+            
+            // 方法2: 使用页面内的点赞函数
+            if (window.WB && window.WB.like) {
+              const result = window.WB.like('${postId}');
+              return { success: true, liked: result.success, message: result.message };
+            }
+            
+            // 方法3: 模拟用户操作
+            const postElement = document.querySelector('[data-id="${postId}"]');
+            if (postElement) {
+              const likeButton = postElement.querySelector('button[title*="赞"], button[title*="like"], .like, .attitude');
+              if (likeButton) {
+                likeButton.click();
+                return { success: true, liked: true, message: '点赞成功（模拟操作）' };
+              }
+            }
+            
+            return { success: false, error: '未找到点赞方法' };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        })()
+      `);
+
+      if (result.success) {
+        logger.logWeiboOperation('点赞成功', { method: 'browser_context', postId });
+        return {
+          success: true,
+          liked: result.liked || true,
+          message: result.message || '点赞成功',
+        };
+      } else {
+        throw new Error('点赞失败：' + result.error);
+      }
     } catch (error) {
       logger.error('点赞微博失败:', error);
       throw error;
@@ -438,12 +518,45 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('关注用户', { userId });
       
-      // 这里应该调用实际的关注 API
-      return {
-        success: true,
-        followed: true,
-        message: '关注用户成功',
-      };
+      // 强制要求Electron环境，禁止降级
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+      
+      // 使用页面上下文执行关注操作
+      const result = await injectionTools.executeInPageContext(`
+        (function() {
+          try {
+            // 方法1: 查找并点击关注按钮
+            const followBtn = document.querySelector('[data-user-id="${userId}"] .follow-btn, [data-user-id="${userId}"] .follow');
+            if (followBtn) {
+              followBtn.click();
+              return { success: true, followed: true, message: '关注成功（通过页面操作）' };
+            }
+            
+            // 方法2: 使用页面内的关注函数
+            if (window.WB && window.WB.follow) {
+              const result = window.WB.follow('${userId}');
+              return { success: true, followed: result.success, message: result.message };
+            }
+            
+            return { success: false, error: '未找到关注方法' };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        })()
+      `);
+
+      if (result.success) {
+        logger.logWeiboOperation('关注用户成功', { method: 'browser_context', userId });
+        return {
+          success: true,
+          followed: result.followed || true,
+          message: result.message || '关注用户成功',
+        };
+      } else {
+        throw new Error('关注用户失败：' + result.error);
+      }
     } catch (error) {
       logger.error('关注用户失败:', error);
       throw error;
@@ -454,12 +567,45 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('取消关注用户', { userId });
       
-      // 这里应该调用实际的取消关注 API
-      return {
-        success: true,
-        followed: false,
-        message: '取消关注成功',
-      };
+      // 强制要求Electron环境，禁止降级
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+      
+      // 使用页面上下文执行取消关注操作
+      const result = await injectionTools.executeInPageContext(`
+        (function() {
+          try {
+            // 方法1: 查找并点击取消关注按钮
+            const unfollowBtn = document.querySelector('[data-user-id="${userId}"] .unfollow-btn, [data-user-id="${userId}"] .unfollow');
+            if (unfollowBtn) {
+              unfollowBtn.click();
+              return { success: true, followed: false, message: '取消关注成功（通过页面操作）' };
+            }
+            
+            // 方法2: 使用页面内的取消关注函数
+            if (window.WB && window.WB.unfollow) {
+              const result = window.WB.unfollow('${userId}');
+              return { success: true, followed: !result.success, message: result.message };
+            }
+            
+            return { success: false, error: '未找到取消关注方法' };
+          } catch (error) {
+            return { success: false, error: error.message };
+          }
+        })()
+      `);
+
+      if (result.success) {
+        logger.logWeiboOperation('取消关注成功', { method: 'browser_context', userId });
+        return {
+          success: true,
+          followed: result.followed || false,
+          message: result.message || '取消关注成功',
+        };
+      } else {
+        throw new Error('取消关注失败：' + result.error);
+      }
     } catch (error) {
       logger.error('取消关注用户失败:', error);
       throw error;
@@ -470,9 +616,33 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('获取@我的消息', { limit });
       
-      // 这里应该调用实际的@消息 API
-      // 暂时返回模拟数据
-      return [];
+      // 使用真实的微博@消息API
+      const response = await this.client.get('https://m.weibo.cn/api/statuses/mentions', {
+        params: {
+          count: limit,
+          page: 1
+        }
+      });
+
+      if (response.data && response.data.statuses) {
+        const mentions = response.data.statuses.map((status: any) => ({
+          id: status.id,
+          text: status.text,
+          user: {
+            id: status.user.id,
+            name: status.user.screen_name,
+            avatar: status.user.profile_image_url,
+          },
+          postId: status.id,
+          createdAt: status.created_at,
+        }));
+
+        logger.logWeiboOperation('获取@我的消息成功', { count: mentions.length });
+        return mentions;
+      } else {
+        logger.warn('获取@我的消息失败，返回空列表');
+        return [];
+      }
     } catch (error) {
       logger.error('获取@我的消息失败:', error);
       throw error;
@@ -483,12 +653,37 @@ class WeiboAPI {
     try {
       logger.logWeiboOperation('获取我的评论', { limit });
       
-      // 这里应该调用实际的我的评论 API
-      // 暂时返回模拟数据
-      return [];
+      // 使用真实的微博我的评论API
+      const response = await this.client.get('https://m.weibo.cn/api/comments/to_me', {
+        params: {
+          count: limit,
+          page: 1
+        }
+      });
+
+      if (response.data && response.data.comments) {
+        const comments = response.data.comments.map((comment: any) => ({
+          id: comment.id,
+          text: comment.text,
+          user: {
+            id: comment.user.id,
+            name: comment.user.screen_name,
+            avatar: comment.user.profile_image_url,
+          },
+          createdAt: comment.created_at,
+          likeCount: comment.like_count,
+          replyCount: comment.reply_count,
+        }));
+
+        logger.logWeiboOperation('获取我的评论成功', { count: comments.length });
+        return comments;
+      } else {
+        logger.warn('获取我的评论失败，返回空列表');
+        return [];
+      }
     } catch (error) {
       logger.error('获取我的评论失败:', error);
-      throw error;
+      return [];
     }
   }
 }
