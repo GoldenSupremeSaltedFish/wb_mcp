@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger';
 import { configManager, BrowserFingerprint } from '../utils/config';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 
 // 条件导入Electron模块
 let BrowserWindow: any = null;
@@ -10,9 +11,12 @@ try {
   if (typeof electron === 'object' && electron.BrowserWindow) {
     BrowserWindow = electron.BrowserWindow;
     ipcMain = electron.ipcMain;
+    logger.info('Electron模块加载成功');
+  } else {
+    logger.warn('Electron模块结构异常');
   }
 } catch (error) {
-  logger.warn('Electron模块不可用，运行在非Electron环境中');
+  logger.warn('Electron模块不可用，运行在非Electron环境中:', error);
 }
 
 export interface BrowserOptions {
@@ -39,6 +43,8 @@ export interface LoginStatus {
 
 class BrowserManager {
   private weiboWindow: any = null;
+  private playwrightBrowser: Browser | null = null;
+  private playwrightContext: BrowserContext | null = null;
   private isInitialized = false;
   private navigationHistory: NavigationEvent[] = [];
   private loginStatus: LoginStatus = {
@@ -632,6 +638,93 @@ class BrowserManager {
       this.weiboWindow.show();
       this.weiboWindow.focus();
       logger.info('显示微博浏览器窗口');
+    }
+  }
+
+  // ==================== Playwright支持方法 ====================
+
+  /**
+   * 获取Playwright浏览器上下文
+   */
+  public async getBrowserContext(): Promise<BrowserContext> {
+    if (!this.playwrightContext) {
+      await this.initializePlaywright();
+    }
+    return this.playwrightContext!;
+  }
+
+  /**
+   * 获取Playwright页面
+   */
+  public async getPage(): Promise<Page> {
+    if (!this.playwrightContext) {
+      await this.initializePlaywright();
+    }
+    return await this.playwrightContext!.newPage();
+  }
+
+  /**
+   * 初始化Playwright浏览器
+   */
+  private async initializePlaywright(): Promise<void> {
+    try {
+      logger.logWeiboOperation('初始化Playwright浏览器');
+
+      // 启动Chromium浏览器
+      this.playwrightBrowser = await chromium.launch({
+        headless: false, // 显示浏览器窗口
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+
+      // 获取配置
+      const config = configManager.getConfig();
+      
+      // 创建浏览器上下文
+      this.playwrightContext = await this.playwrightBrowser.newContext({
+        userAgent: config.weibo.userAgent,
+        viewport: {
+          width: config.weibo.browserFingerprint.viewport.width,
+          height: config.weibo.browserFingerprint.viewport.height
+        },
+        locale: config.weibo.browserFingerprint.locale,
+        timezoneId: config.weibo.browserFingerprint.timezone,
+        geolocation: config.weibo.browserFingerprint.geolocation,
+        permissions: ['geolocation']
+      });
+
+      logger.logWeiboOperation('Playwright浏览器初始化完成');
+    } catch (error) {
+      logger.error('Playwright浏览器初始化失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 清理Playwright资源
+   */
+  public async cleanupPlaywright(): Promise<void> {
+    try {
+      if (this.playwrightContext) {
+        await this.playwrightContext.close();
+        this.playwrightContext = null;
+      }
+      
+      if (this.playwrightBrowser) {
+        await this.playwrightBrowser.close();
+        this.playwrightBrowser = null;
+      }
+      
+      logger.logWeiboOperation('Playwright资源清理完成');
+    } catch (error) {
+      logger.error('Playwright资源清理失败:', error);
     }
   }
 

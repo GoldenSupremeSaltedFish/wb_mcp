@@ -2,6 +2,9 @@ import axios, { AxiosInstance } from 'axios';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
 import { injectionTools } from '../browser/injection-tools';
+import { browserManager } from '../browser/browser-manager';
+import { SimpleHARObserver, ActionSequence } from '../browser/simple-har-observer';
+import { RequestReplayer, RequestSample } from '../browser/request-replayer';
 // import { errorRecovery } from '../utils/error-recovery';
 
 export interface WeiboPost {
@@ -419,6 +422,10 @@ class WeiboAPI {
       }
     } catch (error) {
       logger.error('发布微博失败:', error);
+      logger.error('错误详情:', {
+        message: error instanceof Error ? error.message : '未知错误',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       throw error;
     }
   }
@@ -684,6 +691,193 @@ class WeiboAPI {
     } catch (error) {
       logger.error('获取我的评论失败:', error);
       return [];
+    }
+  }
+
+  // ==================== 三步法网页版MCP功能 ====================
+
+  /**
+   * Task A - 快速观测：在Playwright中打开页面，执行动作，保存HAR与请求日志
+   */
+  public async observeWeiboActions(url: string, actionSequence: ActionSequence[]): Promise<{
+    harFile: string;
+    requestLogs: any[];
+  }> {
+    try {
+      logger.logWeiboOperation('开始Task A - 快速观测', { url, actionCount: actionSequence.length });
+
+      // 强制要求Electron环境
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+
+      // 创建HAR观测器
+      const harObserver = new SimpleHARObserver();
+      
+      // 初始化浏览器上下文
+      const context = await browserManager.getBrowserContext();
+      await harObserver.initialize(context);
+
+      // 执行观测
+      const result = await harObserver.observeActions(url, actionSequence);
+
+      // 清理资源
+      await harObserver.cleanup();
+
+      logger.logWeiboOperation('Task A - 快速观测完成', {
+        harFile: result.harFile,
+        requestCount: result.requestLogs.length
+      });
+
+      return result;
+    } catch (error) {
+      logger.error('Task A - 快速观测失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Task B - 注入拦截：在页面evaluate注入拦截脚本，收集请求明细
+   */
+  public async injectAndIntercept(url: string, actionSequence: ActionSequence[]): Promise<{
+    requestLogs: any[];
+    consoleLogs: string[];
+  }> {
+    try {
+      logger.logWeiboOperation('开始Task B - 注入拦截', { url, actionCount: actionSequence.length });
+
+      // 强制要求Electron环境
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+
+      // 获取浏览器页面
+      const page = await browserManager.getPage();
+      if (!page) {
+        throw new Error('无法获取浏览器页面');
+      }
+
+      // 导航到目标页面
+      await page.goto(url, { waitUntil: 'networkidle' });
+
+      // 注入拦截脚本
+      const fs = require('fs');
+      const path = require('path');
+      const injectScript = fs.readFileSync(path.join(__dirname, '../browser/inject-intercept.js'), 'utf8');
+      await page.addScriptTag({ content: injectScript });
+
+      // 启动拦截器
+      await page.evaluate(() => {
+        if ((window as any).InjectInterceptor) {
+          (window as any).InjectInterceptor.start();
+        }
+      });
+
+      // 执行动作序列
+      for (const action of actionSequence) {
+        await this.executePageAction(page, action);
+      }
+
+      // 等待请求完成
+      await page.waitForTimeout(2000);
+
+      // 获取拦截的请求日志
+      const requestLogs = await page.evaluate(() => {
+        return (window as any).InjectInterceptor ? (window as any).InjectInterceptor.getLogs() : [];
+      });
+
+      // 获取控制台日志
+      const consoleLogs: string[] = [];
+      page.on('console', (msg: any) => {
+        if (msg.text().includes('[INJECT-INTERCEPT]')) {
+          consoleLogs.push(msg.text());
+        }
+      });
+
+      logger.logWeiboOperation('Task B - 注入拦截完成', {
+        requestCount: requestLogs.length,
+        consoleLogCount: consoleLogs.length
+      });
+
+      return {
+        requestLogs,
+        consoleLogs
+      };
+    } catch (error) {
+      logger.error('Task B - 注入拦截失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Task C - 页面内复用：在页面上下文重放请求，观察响应
+   */
+  public async replayWeiboRequests(requestSamples: RequestSample[]): Promise<{
+    results: any[];
+    successCount: number;
+    failureCount: number;
+  }> {
+    try {
+      logger.logWeiboOperation('开始Task C - 页面内复用', { requestCount: requestSamples.length });
+
+      // 强制要求Electron环境
+      if (!injectionTools.isElectronAvailable()) {
+        throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
+      }
+
+      // 获取浏览器页面
+      const page = await browserManager.getPage();
+      if (!page) {
+        throw new Error('无法获取浏览器页面');
+      }
+
+      // 创建请求重放器
+      const replayer = new RequestReplayer(page);
+
+      // 重放请求
+      const results = await replayer.replayRequests(requestSamples);
+
+      const successCount = results.filter(r => r.success).length;
+      const failureCount = results.filter(r => !r.success).length;
+
+      logger.logWeiboOperation('Task C - 页面内复用完成', {
+        total: requestSamples.length,
+        success: successCount,
+        failure: failureCount
+      });
+
+      return {
+        results,
+        successCount,
+        failureCount
+      };
+    } catch (error) {
+      logger.error('Task C - 页面内复用失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 执行页面动作
+   */
+  private async executePageAction(page: any, action: ActionSequence): Promise<void> {
+    switch (action.type) {
+      case 'click':
+        if (action.selector) {
+          await page.click(action.selector);
+        }
+        break;
+      case 'input':
+        if (action.selector && action.value) {
+          await page.fill(action.selector, action.value);
+        }
+        break;
+      case 'scroll':
+        await page.evaluate(() => window.scrollBy(0, 500));
+        break;
+      case 'wait':
+        await page.waitForTimeout(action.duration || 1000);
+        break;
     }
   }
 }
