@@ -376,10 +376,47 @@ class WeiboAPI {
       const window = browserManager.getWindow();
       logger.info(`🔗 [调用链追踪] Step 4.1: browserManager.getWindow()`, { hasWindow: !!window });
       
+      // 确保在首页（这会自动等待登录并导航到首页）
+      logger.info(`🔗 [调用链追踪] Step 4.2: 确保在首页`);
+      try {
+        await browserManager.ensureOnHomePage();
+        logger.info(`🔗 [调用链追踪] Step 4.3: 已在首页，可以执行发布操作`);
+      } catch (error) {
+        logger.error(`🔗 [调用链追踪] Step 4.3: 无法确保在首页`, error);
+        throw new Error(`无法导航到首页: ${error instanceof Error ? error.message : '未知错误'}`);
+      }
+      
       // 使用浏览器上下文执行JavaScript，复用页面内函数
       const result = await injectionTools.executeInPageContext(`
         (function() {
           try {
+            // 首先检查当前页面状态
+            const currentUrl = window.location.href;
+            const isLoginPage = currentUrl.includes('login') || currentUrl.includes('passport') || currentUrl.includes('newlogin');
+            
+            if (isLoginPage) {
+              return { 
+                success: false, 
+                error: '当前在登录页面，无法发布微博。请先登录并导航到首页。' 
+              };
+            }
+            
+            // 检查是否有发布相关的DOM元素
+            const hasPublishArea = !!(
+              document.querySelector('textarea[placeholder*="有什么新鲜事"]') ||
+              document.querySelector('textarea[placeholder*="说点什么"]') ||
+              document.querySelector('.woo-box-item-flex .toolbar_publish_btn') ||
+              document.querySelector('.WB_feed') ||
+              document.querySelector('.feed_list')
+            );
+            
+            if (!hasPublishArea) {
+              return { 
+                success: false, 
+                error: '当前页面不是微博首页，无法定位发布入口。当前URL: ' + currentUrl 
+              };
+            }
+            
             // 在页面上下文中执行微博发布
             // 复用页面内的认证状态和函数
             
@@ -410,7 +447,10 @@ class WeiboAPI {
             }
             
             // 方法3: 使用页面内的XHR拦截器获取真实请求
-            return { success: false, error: '未找到发布方法' };
+            return { 
+              success: false, 
+              error: '未找到发布方法。当前页面可能不是微博首页，或页面元素未完全加载。当前URL: ' + currentUrl 
+            };
           } catch (error) {
             return { success: false, error: error.message };
           }

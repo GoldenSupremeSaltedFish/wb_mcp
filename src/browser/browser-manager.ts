@@ -51,6 +51,10 @@ class BrowserManager {
     isLoggedIn: false,
     lastCheck: 0,
   };
+  private loginWaitPromise: Promise<void> | null = null;
+  private loginWaitResolve: (() => void) | null = null;
+  private isWaitingForLogin = false;
+  private loginCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.setupIpcHandlers();
@@ -325,9 +329,13 @@ class BrowserManager {
 
   private detectSpecialPages(url: string): void {
     // 检测登录页面
-    if (url.includes('login') || url.includes('passport')) {
-      logger.warn('检测到登录页面，可能需要用户手动登录');
+    if (url.includes('login') || url.includes('passport') || url.includes('newlogin')) {
+      logger.warn('检测到登录页面，等待用户手动登录');
       this.showWindow();
+      // 开始等待登录
+      if (!this.isWaitingForLogin) {
+        this.startLoginWait();
+      }
     }
 
     // 检测验证码页面
@@ -340,6 +348,12 @@ class BrowserManager {
     if (url.includes('security') || url.includes('risk')) {
       logger.warn('检测到风控页面');
       this.showWindow();
+    }
+
+    // 检测登录成功：URL从登录页跳转到首页
+    if ((url === 'https://weibo.com' || url.startsWith('https://weibo.com/') && !url.includes('login') && !url.includes('passport') && !url.includes('newlogin')) && this.isWaitingForLogin) {
+      logger.info('检测到可能已登录，验证登录状态...');
+      this.checkLoginAndNavigate();
     }
   }
 
@@ -540,6 +554,236 @@ class BrowserManager {
     }
   }
 
+  /**
+   * 开始等待用户登录
+   */
+  private startLoginWait(): void {
+    if (this.isWaitingForLogin) return;
+    
+    this.isWaitingForLogin = true;
+    logger.info('🔐 开始等待用户登录...');
+    
+    // 显示窗口让用户登录
+    this.showWindow();
+    
+    // 创建等待Promise
+    this.loginWaitPromise = new Promise((resolve) => {
+      this.loginWaitResolve = resolve;
+    });
+    
+    // 开始轮询检查登录状态
+    this.startLoginCheckInterval();
+  }
+
+  /**
+   * 开始轮询检查登录状态
+   */
+  private startLoginCheckInterval(): void {
+    if (this.loginCheckInterval) {
+      clearInterval(this.loginCheckInterval);
+    }
+    
+    this.loginCheckInterval = setInterval(async () => {
+      if (!this.isWaitingForLogin) {
+        if (this.loginCheckInterval) {
+          clearInterval(this.loginCheckInterval);
+          this.loginCheckInterval = null;
+        }
+        return;
+      }
+      
+      await this.checkLoginAndNavigate();
+    }, 2000); // 每2秒检查一次
+  }
+
+  /**
+   * 检查登录状态并导航到首页
+   */
+  private async checkLoginAndNavigate(): Promise<void> {
+    if (!this.weiboWindow) return;
+    
+    try {
+      const status = await this.checkLoginStatus();
+      
+      if (status.isLoggedIn) {
+        logger.info('✅ 登录成功！准备导航到首页...');
+        
+        // 停止等待
+        this.isWaitingForLogin = false;
+        if (this.loginCheckInterval) {
+          clearInterval(this.loginCheckInterval);
+          this.loginCheckInterval = null;
+        }
+        
+        // 获取当前URL
+        const currentUrl = this.weiboWindow.webContents.getURL();
+        
+        // 如果不在首页，导航到首页
+        if (currentUrl.includes('login') || currentUrl.includes('passport') || currentUrl.includes('newlogin')) {
+          logger.info('🔄 从登录页导航到首页...');
+          await this.weiboWindow.loadURL('https://weibo.com');
+          
+          // 等待页面加载完成
+          await new Promise<void>((resolve) => {
+            this.weiboWindow.webContents.once('did-finish-load', () => {
+              logger.info('✅ 已成功导航到首页');
+              resolve();
+            });
+          });
+        }
+        
+        // 解析等待Promise
+        if (this.loginWaitResolve) {
+          this.loginWaitResolve();
+          this.loginWaitResolve = null;
+        }
+      }
+    } catch (error) {
+      logger.error('检查登录状态失败:', error);
+    }
+  }
+
+  /**
+   * 等待用户登录完成
+   */
+  public async waitForLogin(timeout: number = 300000): Promise<boolean> {
+    // 如果已经登录，直接返回
+    const status = await this.checkLoginStatus();
+    if (status.isLoggedIn) {
+      logger.info('✅ 用户已登录');
+      return true;
+    }
+    
+    // 如果当前在登录页，开始等待
+    if (this.weiboWindow) {
+      const currentUrl = this.weiboWindow.webContents.getURL();
+      if (currentUrl.includes('login') || currentUrl.includes('passport') || currentUrl.includes('newlogin')) {
+        if (!this.isWaitingForLogin) {
+          this.startLoginWait();
+        }
+      }
+    }
+    
+    // 等待登录完成
+    if (this.loginWaitPromise) {
+      try {
+        await Promise.race([
+          this.loginWaitPromise,
+          new Promise<boolean>((_, reject) => {
+            setTimeout(() => reject(new Error('等待登录超时')), timeout);
+          })
+        ]);
+        
+        // 再次确认登录状态
+        const finalStatus = await this.checkLoginStatus();
+        if (finalStatus.isLoggedIn) {
+          logger.info('✅ 登录等待完成，用户已成功登录');
+          return true;
+        }
+      } catch (error) {
+        logger.error('等待登录失败:', error);
+        return false;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * 检查当前页面是否在微博首页
+   */
+  public async isOnHomePage(): Promise<boolean> {
+    if (!this.weiboWindow) return false;
+    
+    try {
+      const currentUrl = this.weiboWindow.webContents.getURL();
+      const isHomePage = currentUrl === 'https://weibo.com' || 
+                        (currentUrl.startsWith('https://weibo.com/') && 
+                         !currentUrl.includes('login') && 
+                         !currentUrl.includes('passport') && 
+                         !currentUrl.includes('newlogin'));
+      
+      if (!isHomePage) {
+        logger.warn(`⚠️ 当前不在首页: ${currentUrl}`);
+        return false;
+      }
+      
+      // 进一步检查DOM元素，确认是真正的首页
+      const hasHomePageElements = await this.weiboWindow.webContents.executeJavaScript(`
+        (function() {
+          // 检查是否有发布相关的元素
+          const hasPublishArea = !!(
+            document.querySelector('textarea[placeholder*="有什么新鲜事"]') ||
+            document.querySelector('textarea[placeholder*="说点什么"]') ||
+            document.querySelector('.woo-box-item-flex .toolbar_publish_btn') ||
+            document.querySelector('.WB_feed') ||
+            document.querySelector('.feed_list')
+          );
+          return hasPublishArea;
+        })()
+      `);
+      
+      if (!hasHomePageElements) {
+        logger.warn('⚠️ 当前页面缺少首页元素，可能未完全加载');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      logger.error('检查首页状态失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 确保在首页，如果不在则导航到首页
+   */
+  public async ensureOnHomePage(): Promise<boolean> {
+    if (!this.weiboWindow) {
+      throw new Error('浏览器窗口未初始化');
+    }
+    
+    // 检查是否在首页
+    const isHome = await this.isOnHomePage();
+    if (isHome) {
+      logger.info('✅ 当前已在首页');
+      return true;
+    }
+    
+    // 检查登录状态
+    const loginStatus = await this.checkLoginStatus();
+    if (!loginStatus.isLoggedIn) {
+      logger.warn('⚠️ 用户未登录，等待登录...');
+      const loggedIn = await this.waitForLogin();
+      if (!loggedIn) {
+        throw new Error('用户未登录，无法导航到首页');
+      }
+    }
+    
+    // 导航到首页
+    logger.info('🔄 导航到首页...');
+    await this.weiboWindow.loadURL('https://weibo.com');
+    
+    // 等待页面加载完成
+    await new Promise<void>((resolve) => {
+      this.weiboWindow.webContents.once('did-finish-load', () => {
+        resolve();
+      });
+    });
+    
+    // 等待页面元素加载
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // 再次检查
+    const isHomeNow = await this.isOnHomePage();
+    if (!isHomeNow) {
+      throw new Error('导航到首页失败，页面元素未加载');
+    }
+    
+    logger.info('✅ 已成功导航到首页');
+    return true;
+  }
+
   public async checkLoginStatus(): Promise<LoginStatus> {
     if (!this.weiboWindow) {
       return this.loginStatus;
@@ -547,7 +791,45 @@ class BrowserManager {
 
     try {
       const result = await this.weiboWindow.webContents.executeJavaScript(`
-        window.weiboLoginStatus || { isLoggedIn: false, username: null, avatar: null }
+        (function() {
+          // 检查登录状态
+          if (!window.weiboLoginStatus) {
+            window.weiboLoginStatus = {
+              isLoggedIn: false,
+              username: null,
+              avatar: null
+            };
+          }
+          
+          // 检查是否有用户信息（多种方式）
+          const userInfo = document.querySelector('[data-user-id]') || 
+                          document.querySelector('.gn_name') ||
+                          document.querySelector('.username') ||
+                          document.querySelector('.WB_info') ||
+                          document.querySelector('[class*="user"]');
+          
+          // 检查Cookie中是否有登录信息
+          const hasLoginCookie = document.cookie.includes('SUB=') || 
+                                document.cookie.includes('SUBP=') ||
+                                document.cookie.includes('WBPSESS=');
+          
+          // 检查URL是否在登录页
+          const isOnLoginPage = window.location.href.includes('login') || 
+                               window.location.href.includes('passport') ||
+                               window.location.href.includes('newlogin');
+          
+          // 综合判断
+          if (userInfo || (hasLoginCookie && !isOnLoginPage)) {
+            window.weiboLoginStatus.isLoggedIn = true;
+            if (userInfo) {
+              window.weiboLoginStatus.username = userInfo.textContent || userInfo.getAttribute('data-user-id');
+            }
+          } else {
+            window.weiboLoginStatus.isLoggedIn = false;
+          }
+          
+          return window.weiboLoginStatus;
+        })()
       `);
 
       this.loginStatus = {
@@ -603,7 +885,7 @@ class BrowserManager {
   /**
    * 在页面上下文中执行脚本（网页版MCP核心功能）
    */
-  public async executeScript(script: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  public async executeScript(script: string, requireHomePage: boolean = true): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       logger.info(`🔗 [调用链追踪] Step 6: browserManager.executeScript() → 开始执行`);
       
@@ -629,10 +911,40 @@ class BrowserManager {
         return { success: false, error: '浏览器窗口未初始化' };
       }
       
-      logger.info(`🔗 [调用链追踪] Step 6.4: weiboWindow已就绪，准备执行JavaScript`);
-
-      // 页面加载检查（可选）
-      // await this.waitForNavigation();
+      logger.info(`🔗 [调用链追踪] Step 6.4: weiboWindow已就绪`);
+      
+      // 检查登录状态和页面状态
+      if (requireHomePage) {
+        logger.info(`🔗 [调用链追踪] Step 6.5: 检查登录状态和页面状态`);
+        
+        // 检查登录状态
+        const loginStatus = await this.checkLoginStatus();
+        if (!loginStatus.isLoggedIn) {
+          logger.warn('⚠️ 用户未登录，等待登录...');
+          const loggedIn = await this.waitForLogin();
+          if (!loggedIn) {
+            return { 
+              success: false, 
+              error: '用户未登录，无法执行操作。请先登录微博。' 
+            };
+          }
+        }
+        
+        // 确保在首页
+        logger.info(`🔗 [调用链追踪] Step 6.6: 确保在首页`);
+        try {
+          await this.ensureOnHomePage();
+          logger.info(`🔗 [调用链追踪] Step 6.7: 已在首页，准备执行脚本`);
+        } catch (error) {
+          logger.error(`🔗 [调用链追踪] Step 6.7: 导航到首页失败`, error);
+          return { 
+            success: false, 
+            error: `无法导航到首页: ${error instanceof Error ? error.message : '未知错误'}` 
+          };
+        }
+      }
+      
+      logger.info(`🔗 [调用链追踪] Step 6.8: 准备执行JavaScript`);
 
       // 执行脚本
       logger.info(`🔗 [调用链追踪] Step 7: browserManager.executeJavaScript() → 执行页面脚本`);
