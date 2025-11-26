@@ -473,6 +473,14 @@ class InjectionTools {
   public async executeInPageContext(script: string): Promise<any> {
     try {
       logger.logWeiboOperation('在页面上下文中执行脚本', { scriptLength: script.length });
+      logger.info(`🔗 [调用链追踪] Step 5: injectionTools.executeInPageContext() → 调用 browserManager.executeScript()`);
+      
+      // 验证browserManager实例
+      const window = browserManager.getWindow();
+      logger.info(`🔗 [调用链追踪] Step 5.1: 验证browserManager实例`, { 
+        hasWindow: !!window,
+        hasBrowserManager: !!browserManager 
+      });
       
       // 通过浏览器管理器执行脚本
       const result = await browserManager.executeScript(script);

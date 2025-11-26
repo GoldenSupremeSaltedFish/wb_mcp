@@ -569,12 +569,16 @@ class BrowserManager {
     if (!this.weiboWindow) {
       throw new Error('浏览器窗口未初始化');
     }
+    
+    logger.info(`🔗 [调用链追踪] Step 7.1: weiboWindow.webContents.executeJavaScript() → 最终执行点`);
 
     let lastError: Error | null = null;
     
     for (let i = 0; i < retries; i++) {
       try {
+        logger.info(`🔗 [调用链追踪] Step 7.2: 尝试执行 (${i + 1}/${retries})`);
         const result = await this.weiboWindow.webContents.executeJavaScript(code);
+        logger.info(`🔗 [调用链追踪] Step 7.3: 执行成功，返回结果`);
         logger.debug('JavaScript 执行成功', { attempt: i + 1, code: code.substring(0, 100) });
         return result;
       } catch (error) {
@@ -601,6 +605,8 @@ class BrowserManager {
    */
   public async executeScript(script: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
+      logger.info(`🔗 [调用链追踪] Step 6: browserManager.executeScript() → 开始执行`);
+      
       // 检查是否在Electron环境中
       if (!BrowserWindow) {
         logger.warn('不在Electron环境中，无法执行页面脚本');
@@ -609,21 +615,29 @@ class BrowserManager {
           error: '需要Electron环境才能执行页面脚本。请使用 pnpm run dev:electron 启动' 
         };
       }
+      
+      logger.info(`🔗 [调用链追踪] Step 6.1: BrowserWindow检查通过`);
 
       if (!this.weiboWindow) {
+        logger.info(`🔗 [调用链追踪] Step 6.2: weiboWindow未初始化，开始初始化`);
         // 如果浏览器窗口未初始化，尝试初始化
         await this.initialize();
       }
 
       if (!this.weiboWindow) {
+        logger.error(`🔗 [调用链追踪] Step 6.3: weiboWindow初始化失败`);
         return { success: false, error: '浏览器窗口未初始化' };
       }
+      
+      logger.info(`🔗 [调用链追踪] Step 6.4: weiboWindow已就绪，准备执行JavaScript`);
 
       // 页面加载检查（可选）
       // await this.waitForNavigation();
 
       // 执行脚本
+      logger.info(`🔗 [调用链追踪] Step 7: browserManager.executeJavaScript() → 执行页面脚本`);
       const result = await this.executeJavaScript(script);
+      logger.info(`🔗 [调用链追踪] Step 8: JavaScript执行完成`, { hasResult: !!result });
       
       return { success: true, data: result };
     } catch (error) {
@@ -737,6 +751,10 @@ class BrowserManager {
 
   public getWindow(): any {
     return this.weiboWindow;
+  }
+
+  public getInitializationStatus(): boolean {
+    return this.isInitialized;
   }
 
   public getNavigationHistory(): NavigationEvent[] {

@@ -2,6 +2,7 @@ import { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../utils/logger';
 import { configManager } from '../utils/config';
 import { weiboAPI } from '../api/weibo-api';
+import { browserManager } from '../browser/browser-manager';
 
 export interface PostWeiboParams {
   content: string;
@@ -186,6 +187,7 @@ class WeiboTools {
 
   public async executeTool(name: string, args: any): Promise<CallToolResult> {
     logger.logWeiboOperation(`执行生活助理功能: ${name}`, args);
+    logger.info(`🔗 [调用链追踪] Step 1: weiboTools.executeTool() 被调用`, { tool: name, args });
 
     switch (name) {
       case 'post_weibo':
@@ -224,6 +226,7 @@ class WeiboTools {
     const { content, images, location } = params;
     
     try {
+      logger.info(`🔗 [调用链追踪] Step 2: weiboTools.postWeibo() → 调用 weiboAPI.postWeibo()`);
       const result = await weiboAPI.postWeibo(content, images, location);
       
       return {
@@ -507,6 +510,20 @@ class WeiboTools {
   }
 
   private async getStatus(): Promise<CallToolResult> {
+    logger.info(`🔗 [调用链追踪] Step 2: weiboTools.getStatus() → 检查浏览器状态`);
+    
+    // 验证浏览器管理器是否可用
+    try {
+      const window = browserManager.getWindow();
+      const isInitialized = browserManager.getInitializationStatus();
+      logger.info(`🔗 [调用链追踪] Step 3: browserManager.getWindow()`, { 
+        hasWindow: !!window, 
+        isInitialized 
+      });
+    } catch (error) {
+      logger.warn(`🔗 [调用链追踪] browserManager检查失败:`, error);
+    }
+    
     const config = configManager.getConfig();
     
     return {

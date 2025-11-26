@@ -363,11 +363,18 @@ class WeiboAPI {
   public async postWeibo(content: string, images?: string[], location?: string): Promise<PostWeiboResult> {
     try {
       logger.logWeiboOperation('发布微博', { content, images, location });
+      logger.info(`🔗 [调用链追踪] Step 3: weiboAPI.postWeibo() → 检查Electron环境`);
       
       // 强制要求Electron环境，禁止降级
       if (!injectionTools.isElectronAvailable()) {
         throw new Error('网页版MCP功能需要Electron环境。请使用 pnpm run dev:electron 启动应用。');
       }
+      
+      logger.info(`🔗 [调用链追踪] Step 4: weiboAPI.postWeibo() → 调用 injectionTools.executeInPageContext()`);
+      
+      // 验证browserManager是否可用
+      const window = browserManager.getWindow();
+      logger.info(`🔗 [调用链追踪] Step 4.1: browserManager.getWindow()`, { hasWindow: !!window });
       
       // 使用浏览器上下文执行JavaScript，复用页面内函数
       const result = await injectionTools.executeInPageContext(`
