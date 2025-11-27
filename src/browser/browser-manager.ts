@@ -113,32 +113,48 @@ class BrowserManager {
     }
 
     try {
+      logger.info('🔧 开始创建浏览器窗口...');
       await this.createWeiboWindow();
       this.isInitialized = true;
-      logger.info('浏览器管理器初始化成功');
+      logger.info('✅ 浏览器管理器初始化成功');
     } catch (error) {
-      logger.error('浏览器管理器初始化失败:', error);
+      logger.error('❌ 浏览器管理器初始化失败:', error);
+      if (error instanceof Error) {
+        logger.error('错误详情:', {
+          message: error.message,
+          stack: error.stack
+        });
+      }
       throw error;
     }
   }
 
   private async createWeiboWindow(): Promise<void> {
     if (!BrowserWindow) {
+      logger.error('❌ BrowserWindow不可用，无法创建窗口');
       throw new Error('BrowserWindow不可用');
     }
     
+    logger.info('🔧 准备创建浏览器窗口...');
     const config = configManager.getWeiboConfig();
+    logger.info('🔧 配置已加载，开始创建窗口...');
     
     this.weiboWindow = new BrowserWindow({
       width: config.browserFingerprint.viewport.width,
       height: config.browserFingerprint.viewport.height,
-      show: false, // 默认隐藏
+      show: true, // 默认显示窗口，让用户可以看到
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
         webSecurity: true,
         allowRunningInsecureContent: false,
       },
+    });
+    
+    logger.info('✅ 浏览器窗口已创建', {
+      width: config.browserFingerprint.viewport.width,
+      height: config.browserFingerprint.viewport.height,
+      visible: true
     });
 
     // 设置用户代理

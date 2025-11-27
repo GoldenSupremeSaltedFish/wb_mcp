@@ -30,8 +30,21 @@ if not exist ".env" (
     echo.
 )
 
-REM 启动服务
-echo 启动 MCP 服务...
-pnpm run start:ts
+REM 检查是否需要构建
+if not exist "dist" (
+    echo 正在构建项目...
+    pnpm run build
+    if %errorlevel% neq 0 (
+        echo 错误: 构建失败
+        pause
+        exit /b 1
+    )
+)
+
+REM 启动服务（使用Electron环境，才能显示浏览器窗口）
+echo 启动 MCP 服务（Electron环境）...
+echo 注意: 网页版MCP功能需要Electron环境才能使用浏览器功能
+echo.
+pnpm run start:electron
 
 pause

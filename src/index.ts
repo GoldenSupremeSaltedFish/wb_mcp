@@ -22,10 +22,19 @@ async function main(): Promise<void> {
     
     // 初始化浏览器管理器（仅在 Electron 环境下）
     try {
+      logger.info('🔧 开始初始化浏览器管理器...');
       await browserManager.initialize();
-      logger.info('浏览器管理器初始化成功');
+      logger.info('✅ 浏览器管理器初始化成功');
     } catch (error) {
-      logger.warn('浏览器管理器初始化失败（可能不在 Electron 环境）:', error);
+      logger.error('❌ 浏览器管理器初始化失败:', error);
+      if (error instanceof Error) {
+        logger.error('错误详情:', {
+          message: error.message,
+          stack: error.stack
+        });
+      }
+      // 不抛出错误，允许服务继续运行（但浏览器功能不可用）
+      logger.warn('⚠️ 浏览器功能将不可用，但MCP服务可以继续运行');
     }
     
     logger.info('微博 MCP 服务启动成功！');
