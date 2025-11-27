@@ -5,12 +5,14 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 // 条件导入Electron模块
 let BrowserWindow: any = null;
 let ipcMain: any = null;
+let electronApp: any = null;
 
 try {
   const electron = require('electron');
   if (typeof electron === 'object' && electron.BrowserWindow) {
     BrowserWindow = electron.BrowserWindow;
     ipcMain = electron.ipcMain;
+    electronApp = electron.app;
     logger.info('Electron模块加载成功');
   } else {
     logger.warn('Electron模块结构异常');
@@ -55,6 +57,23 @@ class BrowserManager {
   private loginWaitResolve: (() => void) | null = null;
   private isWaitingForLogin = false;
   private loginCheckInterval: NodeJS.Timeout | null = null;
+  private isSimulatingBehavior = false; // 防止重复执行用户行为模拟
+  private lastBehaviorSimulationTime = 0; // 上次行为模拟时间
+
+  private async ensureElectronAppReady(): Promise<void> {
+    if (!electronApp) {
+      logger.warn('Electron App 不可用，可能不在Electron环境中');
+      return;
+    }
+
+    if (electronApp.isReady()) {
+      return;
+    }
+
+    logger.info('⌛ 等待Electron app准备就绪...');
+    await electronApp.whenReady();
+    logger.info('✅ Electron app已准备就绪');
+  }
 
   constructor() {
     this.setupIpcHandlers();
@@ -114,6 +133,7 @@ class BrowserManager {
 
     try {
       logger.info('🔧 开始创建浏览器窗口...');
+      await this.ensureElectronAppReady();
       await this.createWeiboWindow();
       this.isInitialized = true;
       logger.info('✅ 浏览器管理器初始化成功');
@@ -135,6 +155,7 @@ class BrowserManager {
       throw new Error('BrowserWindow不可用');
     }
     
+    await this.ensureElectronAppReady();
     logger.info('🔧 准备创建浏览器窗口...');
     const config = configManager.getWeiboConfig();
     logger.info('🔧 配置已加载，开始创建窗口...');
@@ -336,10 +357,16 @@ class BrowserManager {
     // 注入检测脚本
     this.injectDetectionScripts();
     
-    // 模拟用户行为
-    this.simulateUserBehavior();
+    // 只在必要时模拟用户行为（避免频繁触发）
+    // 1. 距离上次模拟超过10秒
+    // 2. 当前不在等待登录状态
+    // 3. 不在执行行为模拟中
+    const timeSinceLastSimulation = Date.now() - this.lastBehaviorSimulationTime;
+    if (!this.isSimulatingBehavior && !this.isWaitingForLogin && timeSinceLastSimulation > 10000) {
+      this.simulateUserBehavior();
+    }
     
-    // 检查登录状态
+    // 检查登录状态（不触发页面操作）
     this.checkLoginStatus();
   }
 
@@ -441,10 +468,27 @@ class BrowserManager {
   }
 
   private async simulateUserBehavior(): Promise<void> {
+    // 防止重复执行
+    if (this.isSimulatingBehavior) {
+      logger.debug('用户行为模拟正在进行中，跳过本次执行');
+      return;
+    }
+
+    this.isSimulatingBehavior = true;
+    this.lastBehaviorSimulationTime = Date.now();
+
     const config = configManager.getWeiboConfig();
     const behavior = config.userBehavior;
 
     try {
+      // 只在用户主动操作时模拟，不在自动检测时模拟
+      // 如果当前在等待登录，不执行行为模拟
+      if (this.isWaitingForLogin) {
+        logger.debug('等待登录中，跳过用户行为模拟');
+        this.isSimulatingBehavior = false;
+        return;
+      }
+
       // 随机等待时间
       if (behavior.randomDelay) {
         const waitTime = Math.random() * (behavior.maxWaitTime - behavior.minWaitTime) + behavior.minWaitTime;
@@ -462,7 +506,7 @@ class BrowserManager {
         await this.simulateMouseMovement();
       }
 
-      // 模拟滚动
+      // 模拟滚动（降低频率，避免持续滚动）
       if (behavior.simulateScroll) {
         await this.simulateScrolling();
       }
@@ -470,6 +514,8 @@ class BrowserManager {
       logger.info('用户行为模拟完成');
     } catch (error) {
       logger.error('用户行为模拟失败:', error);
+    } finally {
+      this.isSimulatingBehavior = false;
     }
   }
 
@@ -542,10 +588,22 @@ class BrowserManager {
     if (!this.weiboWindow) return;
 
     try {
+      // 只在必要时滚动，避免持续滚动
+      // 检查是否已经滚动过（通过检查滚动位置）
+      const currentScroll = await this.weiboWindow.webContents.executeJavaScript(`
+        window.pageYOffset || document.documentElement.scrollTop || 0
+      `);
+      
+      // 如果已经滚动了很多，不再滚动
+      if (currentScroll > 1000) {
+        logger.debug('页面已滚动足够距离，跳过滚动模拟');
+        return;
+      }
+
       const scrollScript = `
         (function() {
-          // 随机滚动距离
-          const scrollY = Math.random() * 500 + 100;
+          // 生成随机滚动距离（减少滚动幅度）
+          const scrollY = Math.random() * 200 + 50; // 从100-500改为50-250
           
           // 平滑滚动
           window.scrollTo({
@@ -619,6 +677,7 @@ class BrowserManager {
     if (!this.weiboWindow) return;
     
     try {
+      // 只检查登录状态，不执行任何页面操作（避免触发页面刷新）
       const status = await this.checkLoginStatus();
       
       if (status.isLoggedIn) {
@@ -634,14 +693,23 @@ class BrowserManager {
         // 获取当前URL
         const currentUrl = this.weiboWindow.webContents.getURL();
         
-        // 如果不在首页，导航到首页
+        // 如果不在首页，导航到首页（只导航一次）
         if (currentUrl.includes('login') || currentUrl.includes('passport') || currentUrl.includes('newlogin')) {
           logger.info('🔄 从登录页导航到首页...');
+          // 停止所有行为模拟，避免在导航时触发
+          this.isSimulatingBehavior = false;
+          
           await this.weiboWindow.loadURL('https://weibo.com');
           
           // 等待页面加载完成
           await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+              logger.warn('页面加载超时，继续执行');
+              resolve();
+            }, 10000); // 10秒超时
+            
             this.weiboWindow.webContents.once('did-finish-load', () => {
+              clearTimeout(timeout);
               logger.info('✅ 已成功导航到首页');
               resolve();
             });
