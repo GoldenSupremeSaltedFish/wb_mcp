@@ -31,8 +31,23 @@ export class HttpTransport {
   }
 
   private setupMiddleware(): void {
-    // 请求解析
-    this.app.use(express.json({ limit: '10mb' }));
+    // 请求解析 - 改进错误处理和编码支持
+    this.app.use(express.json({ 
+      limit: '10mb',
+      strict: false, // 允许非严格JSON
+      type: 'application/json',
+      verify: (_req: any, _res: any, buf: Buffer) => {
+        // 验证请求体
+        try {
+          JSON.parse(buf.toString('utf8'));
+        } catch (e) {
+          logger.error('JSON解析失败:', {
+            body: buf.toString('utf8').substring(0, 200),
+            error: e instanceof Error ? e.message : '未知错误'
+          });
+        }
+      }
+    }));
     this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
     // 压缩
@@ -91,6 +106,13 @@ export class HttpTransport {
     // MCP 工具执行
     this.app.post('/tools/execute', async (req: Request, res: Response) => {
       try {
+        // 记录原始请求体（用于调试）
+        logger.debug('收到工具执行请求', {
+          body: JSON.stringify(req.body).substring(0, 200),
+          contentType: req.get('Content-Type'),
+          contentLength: req.get('Content-Length')
+        });
+
         const { name, arguments: args } = req.body;
         
         if (!name) {
@@ -209,9 +231,37 @@ export class HttpTransport {
       }
     });
 
+    // JSON解析错误处理（必须在其他错误处理之前）
+    this.app.use((error: any, req: Request, res: Response, next: NextFunction) => {
+      if (error instanceof SyntaxError && 'body' in error) {
+        logger.error('JSON解析错误:', {
+          message: error.message,
+          type: (error as any).type || 'unknown',
+          body: typeof error.body === 'string' ? error.body.substring(0, 200) : error.body,
+          url: req.url,
+          method: req.method,
+          contentType: req.get('Content-Type'),
+          contentLength: req.get('Content-Length')
+        });
+        res.status(400).json({
+          success: false,
+          error: 'JSON解析失败',
+          message: error.message,
+          details: '请检查请求体的JSON格式和编码（应使用UTF-8）'
+        });
+        return;
+      }
+      next(error);
+    });
+
     // 错误处理中间件
-    this.app.use((error: Error, _req: Request, res: Response, _next: NextFunction) => {
-      logger.error('HTTP 请求错误:', error);
+    this.app.use((error: Error, req: Request, res: Response, _next: NextFunction) => {
+      logger.error('HTTP 请求错误:', {
+        message: error.message,
+        stack: error.stack,
+        url: req.url,
+        method: req.method
+      });
       res.status(500).json({
         success: false,
         error: error.message,
