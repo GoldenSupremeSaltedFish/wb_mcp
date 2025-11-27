@@ -378,6 +378,8 @@ class BrowserManager {
       // 开始等待登录
       if (!this.isWaitingForLogin) {
         this.startLoginWait();
+        // 自动定位并点击登录框
+        this.focusLoginInput();
       }
     }
 
@@ -393,10 +395,13 @@ class BrowserManager {
       this.showWindow();
     }
 
-    // 检测登录成功：URL从登录页跳转到首页
-    if ((url === 'https://weibo.com' || url.startsWith('https://weibo.com/') && !url.includes('login') && !url.includes('passport') && !url.includes('newlogin')) && this.isWaitingForLogin) {
+    // 检测登录成功：URL从登录页跳转到首页（但不在等待登录时不自动导航）
+    if ((url === 'https://weibo.com' || (url.startsWith('https://weibo.com/') && !url.includes('login') && !url.includes('passport') && !url.includes('newlogin'))) && this.isWaitingForLogin) {
       logger.info('检测到可能已登录，验证登录状态...');
-      this.checkLoginAndNavigate();
+      // 延迟检查，等待页面完全加载
+      setTimeout(() => {
+        this.checkLoginAndNavigate();
+      }, 2000);
     }
   }
 
@@ -650,6 +655,90 @@ class BrowserManager {
   }
 
   /**
+   * 自动定位并聚焦登录输入框
+   */
+  private async focusLoginInput(): Promise<void> {
+    if (!this.weiboWindow) return;
+
+    try {
+      logger.info('🔍 尝试定位登录框...');
+      
+      // 等待页面加载完成
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const result = await this.weiboWindow.webContents.executeJavaScript(`
+        (function() {
+          // 尝试多种登录框选择器
+          const loginSelectors = [
+            'input[type="text"][placeholder*="手机号"]',
+            'input[type="text"][placeholder*="邮箱"]',
+            'input[type="text"][placeholder*="账号"]',
+            'input[name="username"]',
+            'input[id*="username"]',
+            'input[id*="login"]',
+            'input[class*="username"]',
+            'input[class*="login"]',
+            '.loginname',
+            '#loginname',
+            'input[type="text"]'
+          ];
+          
+          let loginInput = null;
+          for (const selector of loginSelectors) {
+            loginInput = document.querySelector(selector);
+            if (loginInput && loginInput.offsetParent !== null) {
+              break;
+            }
+          }
+          
+          if (loginInput) {
+            // 滚动到输入框
+            loginInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // 等待滚动完成
+            setTimeout(() => {
+              // 聚焦输入框
+              loginInput.focus();
+              loginInput.click();
+              
+              // 触发焦点事件
+              loginInput.dispatchEvent(new Event('focus', { bubbles: true }));
+              loginInput.dispatchEvent(new Event('click', { bubbles: true }));
+            }, 500);
+            
+            return { success: true, selector: loginInput.tagName + (loginInput.id ? '#' + loginInput.id : '') + (loginInput.className ? '.' + loginInput.className.split(' ')[0] : '') };
+          }
+          
+          // 如果找不到输入框，尝试点击登录按钮或链接
+          const loginButton = document.querySelector('a[href*="login"]') || 
+                             document.querySelector('button[class*="login"]') ||
+                             document.querySelector('.login_btn') ||
+                             document.querySelector('#login') ||
+                             document.querySelector('[class*="login-btn"]');
+          
+          if (loginButton) {
+            loginButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => {
+              loginButton.click();
+            }, 500);
+            return { success: true, action: 'clicked_login_button' };
+          }
+          
+          return { success: false, error: '未找到登录框或登录按钮' };
+        })()
+      `);
+      
+      if (result.success) {
+        logger.info('✅ 已定位并聚焦登录框', result);
+      } else {
+        logger.warn('⚠️ 无法自动定位登录框，请手动点击登录框', result);
+      }
+    } catch (error) {
+      logger.error('定位登录框失败:', error);
+    }
+  }
+
+  /**
    * 开始轮询检查登录状态
    */
   private startLoginCheckInterval(): void {
@@ -693,8 +782,15 @@ class BrowserManager {
         // 获取当前URL
         const currentUrl = this.weiboWindow.webContents.getURL();
         
-        // 如果不在首页，导航到首页（只导航一次）
+        // 如果不在首页，导航到首页（只导航一次，且确保真正登录成功）
         if (currentUrl.includes('login') || currentUrl.includes('passport') || currentUrl.includes('newlogin')) {
+          // 再次确认登录状态，避免误判
+          const doubleCheck = await this.checkLoginStatus();
+          if (!doubleCheck.isLoggedIn) {
+            logger.warn('⚠️ 登录状态验证失败，继续等待用户登录');
+            return; // 不导航，继续等待
+          }
+          
           logger.info('🔄 从登录页导航到首页...');
           // 停止所有行为模拟，避免在导航时触发
           this.isSimulatingBehavior = false;
@@ -714,6 +810,16 @@ class BrowserManager {
               resolve();
             });
           });
+          
+          // 再次验证是否真正在首页
+          const isHome = await this.isOnHomePage();
+          if (!isHome) {
+            logger.warn('⚠️ 导航后未在首页，可能登录未成功');
+            // 重新开始等待登录
+            this.isWaitingForLogin = true;
+            this.startLoginWait();
+            return;
+          }
         }
         
         // 解析等待Promise
@@ -902,8 +1008,23 @@ class BrowserManager {
                                window.location.href.includes('passport') ||
                                window.location.href.includes('newlogin');
           
-          // 综合判断
-          if (userInfo || (hasLoginCookie && !isOnLoginPage)) {
+          // 如果在登录页，强制判断为未登录（避免误判）
+          if (isOnLoginPage) {
+            window.weiboLoginStatus.isLoggedIn = false;
+            return window.weiboLoginStatus;
+          }
+          
+          // 检查是否真正在首页（有发布区域）
+          const hasPublishArea = !!(
+            document.querySelector('textarea[placeholder*="有什么新鲜事"]') ||
+            document.querySelector('textarea[placeholder*="说点什么"]') ||
+            document.querySelector('.woo-box-item-flex .toolbar_publish_btn') ||
+            document.querySelector('.WB_feed') ||
+            document.querySelector('.feed_list')
+          );
+          
+          // 综合判断：必须在首页且有发布区域，或者有明确的用户信息
+          if (hasPublishArea || (userInfo && !isOnLoginPage)) {
             window.weiboLoginStatus.isLoggedIn = true;
             if (userInfo) {
               window.weiboLoginStatus.username = userInfo.textContent || userInfo.getAttribute('data-user-id');
